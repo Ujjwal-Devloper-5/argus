@@ -350,7 +350,7 @@ Argus is being built according to a rigorous 10-phase engineering blueprint:
 
 - [x] **Phase 0: Foundation** (Config system, Logging, Database Models, Alembic Migrations)
 - [x] **Phase 1: Stream Ingestor** (PyAV RTSP ingestor, MOG2 motion pre-filter)
-- [ ] **Phase 2: Detection Engine** (YOLOv8 CPU/GPU auto-detect)
+- [x] **Phase 2: Detection Engine** (YOLOv8 CPU/GPU auto-detect)
 - [ ] **Phase 3: Face Recognition** (InsightFace + FAISS + SORT multi-object tracking)
 - [ ] **Phase 4: Recording Engine** (Pre-event circular buffer + hardware-accelerated FFmpeg)
 - [ ] **Phase 5: LLM Intelligence** (Ollama/OpenAI/Anthropic adapters + Auto-learning system)
