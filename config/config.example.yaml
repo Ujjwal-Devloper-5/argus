@@ -1,0 +1,55 @@
+# ARGUS - Main Configuration
+
+cameras:
+  - name: front_door
+    rtsp_url: ${CAMERA_1_RTSP_URL}
+    rtsp_sub_url: ${CAMERA_1_RTSP_SUB_URL}
+    resolution: [1920, 1080]
+    fps: 15
+    # How many seconds to keep in memory before an event triggers
+    pre_buffer_seconds: 5
+    # How many seconds to record after motion/person leaves
+    post_event_seconds: 30
+    zones:
+      # Optional: define polygon zones where detection is active
+      # - [[0, 0], [1920, 0], [1920, 1080], [0, 1080]]
+    disabled: false
+
+detection:
+  # model: yolov8n, yolov8s, yolov8m, yolov8l, yolov8x
+  model: ${DETECTION_MODEL:yolov8n}
+  confidence: 0.60
+  # Filter detections to only these classes (e.g., person, car, dog, cat)
+  classes:
+    - person
+  
+recognition:
+  similarity_threshold: 0.60
+  auto_learn:
+    enabled: true
+    appearances_before_prompt: 5
+    prompt_via: telegram
+
+intelligence:
+  enabled: true
+  provider: ${LLM_PROVIDER:ollama}
+  prompt: >
+    Describe what this person is doing in one sentence.
+    Are they behaving suspiciously? Be concise.
+  # If true, only trigger alerts if LLM flags behavior as suspicious
+  filter_by_suspicion: false
+
+alerts:
+  # Minimum seconds between alerts for the same camera
+  cooldown_seconds: 60
+  quiet_hours:
+    enabled: false
+    start: "23:00"
+    end: "07:00"
+    # Even in quiet hours, alert if LLM flags as highly suspicious
+    override_on_suspicious: true
+
+storage:
+  backend: ${STORAGE_BACKEND:local}
+  # Delete clips older than X days (0 to disable)
+  retention_days: 30

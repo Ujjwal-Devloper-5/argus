@@ -1,0 +1,37 @@
+FROM nvidia/cuda:12.3.0-cudnn9-runtime-ubuntu22.04
+
+LABEL org.opencontainers.image.title="Argus GPU"
+LABEL org.opencontainers.image.description="AI-Powered Smart Security System (CUDA)"
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 \
+    python3.11-dev \
+    python3-pip \
+    libgl1 \
+    libglib2.0-0 \
+    ffmpeg \
+    rclone \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN ln -s /usr/bin/python3.11 /usr/bin/python
+
+WORKDIR /app
+
+COPY requirements.txt requirements-gpu.txt ./
+RUN pip install --no-cache-dir -r requirements-gpu.txt
+
+COPY argus/ ./argus/
+COPY config/ ./config/
+COPY scripts/ ./scripts/
+
+RUN mkdir -p data/clips data/events data/embeddings
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+
+EXPOSE 8501
+
+CMD ["python", "-m", "argus"]

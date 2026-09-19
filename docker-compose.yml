@@ -1,0 +1,63 @@
+name: argus
+
+services:
+  argus:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: argus-core
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+      - ./argus/dashboard:/app/argus/dashboard:ro
+    ports:
+      - "${DASHBOARD_PORT:-8501}:8501"
+    networks:
+      - argus-net
+    depends_on:
+      - argus-db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  argus-db:
+    image: postgres:16-alpine
+    container_name: argus-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: argus
+      POSTGRES_USER: argus
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-argus_secret}
+    volumes:
+      - argus-db-data:/var/lib/postgresql/data
+    networks:
+      - argus-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U argus"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  argus-redis:
+    image: redis:7-alpine
+    container_name: argus-redis
+    restart: unless-stopped
+    networks:
+      - argus-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  argus-db-data:
+
+networks:
+  argus-net:
+    driver: bridge

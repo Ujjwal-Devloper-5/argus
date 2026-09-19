@@ -1,0 +1,38 @@
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Data & Config (keep examples, ignore real ones)
+config/config.yaml
+data/clips/*
+data/events/*
+data/embeddings/*
+data/argus.db
+data/argus.log
+!data/.gitkeep
+!config/known_faces/.gitkeep
+
+# Models (if downloaded locally)
+weights/
+*.pt
+*.onnx
+
+# Tools
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
