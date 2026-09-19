@@ -5,17 +5,14 @@ build-backend = "hatchling.build"
 [project]
 name = "argus-security"
 version = "0.1.0"
-description = "AI-Powered Smart Security System"
+description = "AI-Powered Smart Security System — privacy-first, self-hosted, LLM-enhanced"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
-authors = [
-  { name = "Your Name", email = "you@example.com" }
-]
-keywords = ["security", "ai", "camera", "surveillance", "face-recognition", "yolo", "llm"]
+authors = [{ name = "Ujjwal", email = "ujjwalkumarbgpg6@gmail.com" }]
+keywords = ["security", "ai", "surveillance", "face-recognition", "yolo", "llm", "rtsp"]
 classifiers = [
   "Development Status :: 3 - Alpha",
-  "Intended Audience :: End Users/Desktop",
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
@@ -24,37 +21,57 @@ classifiers = [
 ]
 
 dependencies = [
-  "opencv-python-headless>=4.9.0",
-  "ultralytics>=8.2.0",
-  "insightface>=0.7.3",
+  # --- Stream ---
+  "av>=12.0.0",                        # PyAV for RTSP (libav bindings)
+  "opencv-python-headless>=4.9.0",     # Frame processing, motion detection
+  # --- Detection ---
+  "ultralytics>=8.2.0",                # YOLOv8
+  # --- Face Recognition ---
+  "insightface>=0.7.3",                # ArcFace face recognition
+  "faiss-cpu>=1.8.0",                  # Embedding similarity search
+  "onnxruntime>=1.18.0",               # InsightFace ONNX backend
+  # --- Data & Math ---
   "numpy>=1.26.0",
-  "streamlit>=1.35.0",
-  "python-telegram-bot>=21.0",
+  "pillow>=10.3.0",
+  "scipy>=1.13.0",
+  # --- Database ---
+  "sqlalchemy[asyncio]>=2.0.30",
+  "aiosqlite>=0.20.0",                 # Async SQLite driver
+  "asyncpg>=0.29.0",                   # Async PostgreSQL driver
+  "alembic>=1.13.0",
+  # --- Config ---
+  "pydantic>=2.7.0",
+  "pydantic-settings>=2.3.0",
+  "python-dotenv>=1.0.0",
+  "pyyaml>=6.0.1",
+  # --- Logging ---
+  "structlog>=24.2.0",
+  "rich>=13.7.0",
+  # --- CLI ---
+  "typer>=0.12.0",
+  # --- Networking / HTTP ---
+  "httpx>=0.27.0",
+  # --- Async utils ---
+  "anyio>=4.4.0",
+  # --- LLM ---
   "ollama>=0.2.0",
   "openai>=1.30.0",
   "anthropic>=0.28.0",
   "google-generativeai>=0.6.0",
-  "sqlalchemy>=2.0.0",
-  "alembic>=1.13.0",
-  "pydantic>=2.7.0",
-  "pydantic-settings>=2.3.0",
-  "python-dotenv>=1.0.0",
-  "structlog>=24.2.0",
-  "rich>=13.7.0",
-  "typer>=0.12.0",
-  "httpx>=0.27.0",
-  "pillow>=10.3.0",
-  "scipy>=1.13.0",
-  "redis>=5.0.0",
-  "celery>=5.4.0",
+  # --- Alerts ---
+  "python-telegram-bot>=21.0",
+  "aiosmtplib>=3.0.0",
+  # --- Recording ---
   "ffmpeg-python>=0.2.0",
+  # --- Dashboard ---
+  "streamlit>=1.35.0",
+  "streamlit-autorefresh>=1.0.1",
 ]
 
 [project.optional-dependencies]
 gpu = [
-  "torch>=2.3.0",
-  "torchvision>=0.18.0",
-  "onnxruntime-gpu>=1.18.0",
+  "faiss-gpu>=1.8.0",                  # GPU-accelerated FAISS
+  "onnxruntime-gpu>=1.18.0",           # GPU ONNX for InsightFace
 ]
 dev = [
   "pytest>=8.2.0",
@@ -63,6 +80,8 @@ dev = [
   "ruff>=0.4.0",
   "mypy>=1.10.0",
   "pre-commit>=3.7.0",
+  "types-pyyaml",
+  "types-pillow",
 ]
 
 [project.scripts]
@@ -73,16 +92,35 @@ Homepage = "https://github.com/yourusername/argus"
 Repository = "https://github.com/yourusername/argus"
 Issues = "https://github.com/yourusername/argus/issues"
 
+# ---------------------------------------------------------------------------
+# Tool configurations
+# ---------------------------------------------------------------------------
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "--cov=argus --cov-report=term-missing --cov-fail-under=70"
+
 [tool.ruff]
-line-length = 88
+line-length = 100
 target-version = "py311"
-select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
+ignore = ["E501"]  # Line length handled by formatter
+
+[tool.ruff.lint.isort]
+known-first-party = ["argus"]
 
 [tool.mypy]
 python_version = "3.11"
 strict = false
 ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
 
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-testpaths = ["tests"]
+[tool.coverage.run]
+source = ["argus"]
+omit = ["argus/dashboard/*", "tests/*"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["argus"]
