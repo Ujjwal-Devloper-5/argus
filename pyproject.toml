@@ -100,6 +100,9 @@ Issues = "https://github.com/yourusername/argus/issues"
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "--cov=argus --cov-report=term-missing --cov-fail-under=70"
+filterwarnings = [
+    "ignore:No active cameras configured.*:UserWarning",
+]
 
 [tool.ruff]
 line-length = 100
