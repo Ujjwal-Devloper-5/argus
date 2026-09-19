@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/screenshots/argus-banner.png" alt="Argus Banner" width="800"/>
+<img src="docs/screenshots/argus-banner.jpg" alt="Argus Banner" width="800"/>
 
 # 👁️ Argus
 
