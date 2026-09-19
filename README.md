@@ -344,6 +344,22 @@ Contributions are welcome! Please read [CONTRIBUTING.md](docs/CONTRIBUTING.md) f
 
 ---
 
+## 🏗️ Development Progress
+
+Argus is being built according to a rigorous 10-phase engineering blueprint:
+
+- [x] **Phase 0: Foundation** (Config system, Logging, Database Models, Alembic Migrations)
+- [ ] **Phase 1: Stream Ingestor** (PyAV RTSP ingestor, MOG2 motion pre-filter)
+- [ ] **Phase 2: Detection Engine** (YOLOv8 CPU/GPU auto-detect)
+- [ ] **Phase 3: Face Recognition** (InsightFace + FAISS + SORT multi-object tracking)
+- [ ] **Phase 4: Recording Engine** (Pre-event circular buffer + hardware-accelerated FFmpeg)
+- [ ] **Phase 5: LLM Intelligence** (Ollama/OpenAI/Anthropic adapters + Auto-learning system)
+- [ ] **Phase 6: Alert Engine** (Telegram with inline actions, rate limiting, quiet hours)
+- [ ] **Phase 7: Storage Manager** (Local retention + async rclone to GDrive/S3)
+- [ ] **Phase 8: Pipeline Orchestrator** (Tying the async workers together)
+- [ ] **Phase 9: Dashboard** (Streamlit UI for live view, events, faces, and settings)
+- [ ] **Phase 10: Docker & CI/CD** (Automated builds, GPU containers, deployment scripts)
+
 ## 📄 License
 
 MIT License — see [LICENSE](LICENSE) for details.
