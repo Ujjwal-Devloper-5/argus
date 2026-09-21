@@ -219,6 +219,7 @@ class Settings(BaseSettings):
     # --- Thumbnail path ---
     thumbnails_path: str = "./data/events"
     embeddings_path: str = "./data/embeddings"
+    recordings_path: str = "argus/data/recordings"
 
     # --- Sub-configs ---
     cameras: list[CameraConfig] = []
@@ -250,6 +251,7 @@ class Settings(BaseSettings):
             self.storage.local_path,
             self.thumbnails_path,
             self.embeddings_path,
+            self.recordings_path,
             "./data",
         ]:
             Path(path_str).mkdir(parents=True, exist_ok=True)

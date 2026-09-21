@@ -167,7 +167,17 @@ class TestDetectionModel:
             "box": (10, 20, 30, 40),
             "confidence": 0.95,
             "class_name": "person",
+            "track_id": None,
         }
+        # Also verify serialization when track_id is populated
+        det_tracked = Detection(
+            box=(10, 20, 30, 40),
+            confidence=0.95,
+            class_name="person",
+            track_id=42,
+        )
+        assert det_tracked.model_dump()["track_id"] == 42
+        assert '"track_id":42' in det_tracked.model_dump_json()
 
     def test_detection_is_hashable_and_frozen(self) -> None:
         """Verify Detection is immutable (frozen=True) and can be hashed/added to sets."""

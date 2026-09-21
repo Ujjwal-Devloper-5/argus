@@ -45,6 +45,9 @@ class Detection(BaseModel):
     box: tuple[int, int, int, int]
     confidence: float = Field(..., ge=0.0, le=1.0)
     class_name: str = Field(default="person", min_length=1)
+    track_id: int | None = Field(
+        default=None, description="Tracking ID assigned by object tracker"
+    )
 
     @property
     def x1(self) -> int:

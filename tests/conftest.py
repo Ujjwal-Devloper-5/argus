@@ -39,6 +39,7 @@ def settings(tmp_path, monkeypatch) -> Settings:
     monkeypatch.setenv("ARGUS__STORAGE__LOCAL_PATH", str(tmp_path / "clips"))
     monkeypatch.setenv("ARGUS__THUMBNAILS_PATH", str(tmp_path / "events"))
     monkeypatch.setenv("ARGUS__EMBEDDINGS_PATH", str(tmp_path / "embeddings"))
+    monkeypatch.setenv("ARGUS__RECORDINGS_PATH", str(tmp_path / "recordings"))
 
     s = get_settings()
     yield s
