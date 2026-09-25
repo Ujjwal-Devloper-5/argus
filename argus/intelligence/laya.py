@@ -205,26 +205,22 @@ class LayaDecisionGate:
             detection_confidence=detection_confidence,
         )
 
-        questions = [
-            {
+        questions = {
+            "suspicious": {
                 "type": "noul",
-                "text": "Is the person behaving suspiciously or in an unusual manner?",
-                "key": "suspicious",
+                "instructions": "Is the person behaving suspiciously or in an unusual manner?",
             },
-            {
+            "activity": {
                 "type": "choice",
-                "text": "What best describes the person's activity?",
-                "choices": ["loitering", "passing_through", "working", "unknown"],
-                "key": "activity",
+                "instructions": "What best describes the person's activity?",
+                "criteria": ["loitering", "passing_through", "working", "unknown"],
             },
-            {
+            "urgency": {
                 "type": "score",
-                "text": "How urgently should a security officer review this detection?",
-                "min": 0,
-                "max": 10,
-                "key": "urgency",
+                "instructions": "How urgently should a security officer review this detection?",
+                "criteria": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
             },
-        ]
+        }
 
         try:
             t0 = _time.perf_counter()
@@ -235,9 +231,10 @@ class LayaDecisionGate:
             latency_ms = (_time.perf_counter() - t0) * 1000
 
             # Parse Laya structured output
-            suspicious_prob = float(result.get("suspicious", {}).get("probability", 0.5))
-            activity = result.get("activity", {}).get("label", "unknown")
-            urgency = float(result.get("urgency", {}).get("value", 5.0))
+            answers = result.get("answers", {})
+            suspicious_prob = float(answers.get("suspicious", {}).get("noul", 0.5))
+            activity = answers.get("activity", {}).get("choice", "unknown")
+            urgency = float(answers.get("urgency", {}).get("score", 5.0))
 
             is_suspicious = suspicious_prob >= self._suspicion_threshold
             escalate = is_suspicious or urgency >= self._urgency_threshold or (
