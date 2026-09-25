@@ -73,33 +73,24 @@ Unlike cloud-based solutions, Argus processes everything on-device. Your footage
 
 ## 🏗️ Architecture
 
+```mermaid
+flowchart TD
+    Camera[RTSP Camera] -->|Frames| PyAV[PyAV Stream Ingestor]
+    PyAV --> MOG2[MOG2 Motion Filter]
+    MOG2 -->|Motion detected| YOLO[YOLOv8 Detection]
+    YOLO -->|Person detected| Tracker[SORT Tracker & InsightFace]
+    
+    Tracker -->|Known| Known[Log & Skip]
+    Tracker -->|Unknown| Laya[System 1: Laya 421M Gate]
+    
+    Laya -->|33ms Decision| Gate{Is it suspicious?}
+    
+    Gate -->|NO| Log[Log & Drop - Skip LLM]
+    Gate -->|YES| LLM[System 2: Full LLM Vision]
+    
+    LLM -->|Analysis| AutoLearner[AutoLearner]
+    AutoLearner -->|Unknown Face Threshold| Telegram[Telegram Alert Prompt]
 ```
-┌─────────────────────────────────────────────────────────┐
-│                     IP Cameras (RTSP)                   │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-          ┌────────────▼────────────┐
-          │    Stream Ingestor      │  OpenCV / FFmpeg
-          │  (Motion Pre-filter)    │  Skip static frames
-          └────────────┬────────────┘
-                       │
-          ┌────────────▼────────────┐
-          │   YOLOv8 Detector       │  Person / Object
-          │   (GPU Accelerated)     │  Detection
-          └────────────┬────────────┘
-                       │
-          ┌────────────▼────────────┐
-          │  InsightFace Recognizer │  512-dim face
-          │  + Embedding DB         │  embeddings
-          └──────┬──────────┬───────┘
-                 │          │
-          KNOWN ✅       UNKNOWN ❓
-                 │          │
-             Log only   ┌───▼──────────┐
-                        │ LLM Analyzer │  Ollama / OpenAI
-                        │ Scene Intent │  / Claude / Gemini
-                        └───┬──────────┘
-                            │
                ┌────────────▼────────────┐
                │    Alert Engine         │  Telegram / Email
                │  + Smart Recorder       │  / Webhook / ntfy
@@ -353,7 +344,7 @@ Argus is being built according to a rigorous 10-phase engineering blueprint:
 - [x] **PHASE 2:** Detection Engine (YOLOv8 + async GPU isolation)
 - [x] **PHASE 3:** Face Recognition & Embedding DB (InsightFace + FAISS)
 - [x] **PHASE 4:** Recording Engine (Pre-event circular buffer + FFmpeg)
-- [ ] **Phase 5: LLM Intelligence** (Ollama/OpenAI/Anthropic adapters + Auto-learning system)
+- [x] **Phase 5: LLM Intelligence** (Laya 421M Gate + Multi-provider LLM + AutoLearner)
 - [ ] **Phase 6: Alert Engine** (Telegram with inline actions, rate limiting, quiet hours)
 - [ ] **Phase 7: Storage Manager** (Local retention + async rclone to GDrive/S3)
 - [ ] **Phase 8: Pipeline Orchestrator** (Tying the async workers together)
