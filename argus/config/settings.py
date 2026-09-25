@@ -101,11 +101,21 @@ class GeminiConfig(BaseModel):
     timeout_seconds: int = 30
 
 
+class LayaConfig(BaseModel):
+    """Laya 421M decision model config — the fast System 1 gate before full LLM analysis."""
+
+    enabled: bool = True
+    model_id: str = "convaiinnovations/laya-typed-decisions"  # HuggingFace model ID, fully configurable
+    suspicion_threshold: Annotated[float, Field(ge=0.0, le=1.0)] = 0.60
+    urgency_threshold: Annotated[float, Field(ge=0.0, le=10.0)] = 6.0
+
+
 class LLMConfig(BaseModel):
     """LLM provider settings — swap providers without touching code."""
 
     provider: Literal["ollama", "openai", "anthropic", "gemini", "disabled"] = "ollama"
     ollama: OllamaConfig = OllamaConfig()
+    laya: LayaConfig = LayaConfig()
     openai: OpenAIConfig = OpenAIConfig()
     anthropic: AnthropicConfig = AnthropicConfig()
     gemini: GeminiConfig = GeminiConfig()
@@ -259,7 +269,11 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_llm_credentials(self) -> "Settings":
-        """Ensure API keys are present for non-Ollama providers."""
+        """Ensure API keys are present for cloud providers.
+
+        Note: ollama is a local provider — no API key required.
+        laya is a decision gate (not an LLM provider) configured separately via llm.laya.
+        """
         p = self.llm.provider
         if p == "openai" and not self.llm.openai.api_key:
             raise ValueError("LLM provider is 'openai' but ARGUS__LLM__OPENAI__API_KEY is not set.")
