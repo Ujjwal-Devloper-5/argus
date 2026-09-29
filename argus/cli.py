@@ -1,8 +1,15 @@
 import typer
 from rich.console import Console
 
+from argus.utils.banner import print_banner
+
 app = typer.Typer(help="Argus - AI-Powered Smart Security System")
 console = Console()
+
+@app.callback()
+def main():
+    """Argus main entrypoint."""
+    print_banner()
 
 @app.command()
 def start():

@@ -36,6 +36,7 @@ def settings(tmp_path, monkeypatch) -> Settings:
     monkeypatch.setenv("ARGUS__DATABASE_URL", "sqlite+aiosqlite:///:memory:?uri=true")
     monkeypatch.setenv("ARGUS__LLM__PROVIDER", "disabled")
     monkeypatch.setenv("ARGUS__ALERTS__TELEGRAM__ENABLED", "false")
+    monkeypatch.setenv("ARGUS__ALERTS__DISCORD__ENABLED", "false")
     monkeypatch.setenv("ARGUS__STORAGE__LOCAL_PATH", str(tmp_path / "clips"))
     monkeypatch.setenv("ARGUS__THUMBNAILS_PATH", str(tmp_path / "events"))
     monkeypatch.setenv("ARGUS__EMBEDDINGS_PATH", str(tmp_path / "embeddings"))

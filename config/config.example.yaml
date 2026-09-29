@@ -28,7 +28,7 @@ recognition:
   auto_learn:
     enabled: true
     appearances_before_prompt: 5
-    prompt_via: telegram
+    prompt_via: telegram  # telegram, discord, or both
 
 intelligence:
   enabled: true
@@ -42,12 +42,35 @@ intelligence:
 alerts:
   # Minimum seconds between alerts for the same camera
   cooldown_seconds: 60
+
+  # Alert routing: "telegram", "discord", or "both"
+  routing: both
+
+  # Rate limit: Maximum messages dispatched per second across all platforms
+  max_rate_per_second: 30.0
+
   quiet_hours:
     enabled: false
     start: "23:00"
     end: "07:00"
-    # Even in quiet hours, alert if LLM flags as highly suspicious
+    # Even in quiet hours, alert immediately if LLM flags as suspicious
     override_on_suspicious: true
+    # Policy for non-critical alerts during quiet hours:
+    # "hold" (buffer and deliver after quiet hours) or "drop" (silently discard)
+    action: hold
+
+  telegram:
+    enabled: false
+    bot_token: ${TELEGRAM_BOT_TOKEN}
+    chat_id: ${TELEGRAM_CHAT_ID}
+
+  discord:
+    enabled: false
+    bot_token: ${DISCORD_BOT_TOKEN}
+    # Channel snowflake ID (e.g. 123456789012345678)
+    channel_id: ${DISCORD_CHANNEL_ID:0}
+    # Guild / Server ID (optional)
+    guild_id: ${DISCORD_GUILD_ID:0}
 
 storage:
   backend: ${STORAGE_BACKEND:local}

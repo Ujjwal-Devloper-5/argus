@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # ---------------------------------------------------------------------------
@@ -65,7 +65,7 @@ class AutoLearnConfig(BaseModel):
 
     enabled: bool = True
     appearances_before_prompt: Annotated[int, Field(ge=2, le=100)] = 5
-    prompt_via: Literal["telegram"] = "telegram"
+    prompt_via: Literal["telegram", "discord", "both"] = "telegram"
 
 
 class RecognitionConfig(BaseModel):
@@ -131,6 +131,45 @@ class LLMConfig(BaseModel):
 
 # --- Alert channel sub-configs ---
 
+class DiscordConfig(BaseModel):
+    """Discord bot alert channel settings."""
+
+    enabled: bool = False
+    bot_token: str = ""
+    channel_id: int | str | None = 0
+    guild_id: int | str | None = 0
+
+    @field_validator("bot_token", mode="before")
+    @classmethod
+    def _coerce_token(cls, v: Any) -> str:
+        """Coerce SecretStr or None to plain string."""
+        if isinstance(v, SecretStr):
+            return v.get_secret_value()
+        if v is None:
+            return ""
+        return str(v)
+
+    @property
+    def channel_id_int(self) -> int:
+        """Helper returning channel_id as int (0 if unset/invalid)."""
+        if not self.channel_id:
+            return 0
+        try:
+            return int(self.channel_id)
+        except (ValueError, TypeError):
+            return 0
+
+    @property
+    def guild_id_int(self) -> int:
+        """Helper returning guild_id as int (0 if unset/invalid)."""
+        if not self.guild_id:
+            return 0
+        try:
+            return int(self.guild_id)
+        except (ValueError, TypeError):
+            return 0
+
+
 class TelegramConfig(BaseModel):
     enabled: bool = False
     bot_token: SecretStr | None = None
@@ -159,19 +198,108 @@ class NtfyConfig(BaseModel):
     token: SecretStr | None = None
 
 
+class QuietHoursConfig(BaseModel):
+    """Quiet hours suppression window and policy."""
+
+    model_config = ConfigDict(validate_assignment=True)
+
+    enabled: bool = False
+    start: str = "23:00"
+    end: str = "07:00"
+    override_on_suspicious: bool = True
+    action: Literal["hold", "drop"] = "hold"
+
+    @field_validator("start", "end")
+    @classmethod
+    def validate_time_format(cls, v: str) -> str:
+        """Validate HH:MM 24-hour time format."""
+        import re
+
+        v = v.strip()
+        if not re.match(r"^(?:[01][0-9]|2[0-3]):[0-5][0-9]\Z", v):
+            raise ValueError(f"Quiet hours time must be in HH:MM format (e.g. '23:00'), got '{v}'")
+        return v
+
+
 class AlertsConfig(BaseModel):
     """Alert routing and throttling settings."""
 
     cooldown_seconds: Annotated[int, Field(ge=0, le=3600)] = 60
-    quiet_hours_enabled: bool = False
-    quiet_hours_start: str = "23:00"
-    quiet_hours_end: str = "07:00"
-    # Even in quiet hours, alert immediately if LLM says suspicious
-    override_on_suspicious: bool = True
-    telegram: TelegramConfig = TelegramConfig()
-    email: EmailConfig = EmailConfig()
-    webhook: WebhookConfig = WebhookConfig()
-    ntfy: NtfyConfig = NtfyConfig()
+    routing: Literal["telegram", "discord", "both"] = "both"
+    max_rate_per_second: Annotated[float, Field(gt=0.0, le=1000.0, allow_inf_nan=False)] = 30.0
+    quiet_hours: QuietHoursConfig = Field(default_factory=QuietHoursConfig)
+    telegram: TelegramConfig = Field(default_factory=TelegramConfig)
+    discord: DiscordConfig = Field(default_factory=DiscordConfig)
+    email: EmailConfig = Field(default_factory=EmailConfig)
+    webhook: WebhookConfig = Field(default_factory=WebhookConfig)
+    ntfy: NtfyConfig = Field(default_factory=NtfyConfig)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_legacy_quiet_hours(cls, values: Any) -> Any:
+        """Migrate legacy flat quiet hours fields into nested QuietHoursConfig."""
+        if isinstance(values, dict):
+            qh_data = values.get("quiet_hours")
+            if isinstance(qh_data, QuietHoursConfig):
+                qh_dict = qh_data.model_dump()
+                explicit_fields = qh_data.model_fields_set
+            elif isinstance(qh_data, dict):
+                qh_dict = dict(qh_data)
+                explicit_fields = set(qh_data.keys())
+            else:
+                qh_dict = {}
+                explicit_fields = set()
+
+            for old_key, new_key in [
+                ("quiet_hours_enabled", "enabled"),
+                ("quiet_hours_start", "start"),
+                ("quiet_hours_end", "end"),
+                ("override_on_suspicious", "override_on_suspicious"),
+            ]:
+                if old_key in values:
+                    val = values.pop(old_key)
+                    if new_key not in explicit_fields:
+                        qh_dict[new_key] = val
+
+            if qh_dict:
+                values["quiet_hours"] = qh_dict
+        return values
+
+    # -----------------------------------------------------------------------
+    # Backward compatibility properties (read & write)
+    # -----------------------------------------------------------------------
+
+    @property
+    def quiet_hours_enabled(self) -> bool:
+        return self.quiet_hours.enabled
+
+    @quiet_hours_enabled.setter
+    def quiet_hours_enabled(self, val: bool) -> None:
+        self.quiet_hours.enabled = val
+
+    @property
+    def quiet_hours_start(self) -> str:
+        return self.quiet_hours.start
+
+    @quiet_hours_start.setter
+    def quiet_hours_start(self, val: str) -> None:
+        self.quiet_hours.start = val
+
+    @property
+    def quiet_hours_end(self) -> str:
+        return self.quiet_hours.end
+
+    @quiet_hours_end.setter
+    def quiet_hours_end(self, val: str) -> None:
+        self.quiet_hours.end = val
+
+    @property
+    def override_on_suspicious(self) -> bool:
+        return self.quiet_hours.override_on_suspicious
+
+    @override_on_suspicious.setter
+    def override_on_suspicious(self, val: bool) -> None:
+        self.quiet_hours.override_on_suspicious = val
 
 
 class StorageConfig(BaseModel):
@@ -192,6 +320,21 @@ class DashboardConfig(BaseModel):
     host: str = "0.0.0.0"
     username: str = "admin"
     password: SecretStr = SecretStr("changeme")
+
+
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Recursively merge override dictionary into base dictionary.
+
+    Keys in base are preserved unless present in override. Nested dictionaries
+    are merged recursively; non-dict values in override replace base values.
+    """
+    res = dict(base)
+    for k, v in override.items():
+        if k in res and isinstance(res[k], dict) and isinstance(v, dict):
+            res[k] = _deep_merge(res[k], v)
+        else:
+            res[k] = v
+    return res
 
 
 # ---------------------------------------------------------------------------
@@ -248,14 +391,15 @@ class Settings(BaseSettings):
         if config_path.exists():
             with config_path.open() as f:
                 yaml_data = yaml.safe_load(f) or {}
-            # YAML values are defaults — env vars / .env override them
-            for key, val in yaml_data.items():
-                if key not in values:
-                    values[key] = val
+            # YAML values are defaults — env vars / .env override them (via recursive deep merge)
+            if isinstance(yaml_data, dict) and isinstance(values, dict):
+                return _deep_merge(yaml_data, values)
+            if isinstance(yaml_data, dict) and not values:
+                return yaml_data
         return values
 
     @model_validator(mode="after")
-    def ensure_data_dirs_exist(self) -> "Settings":
+    def ensure_data_dirs_exist(self) -> Settings:
         """Create required runtime directories if they don't exist."""
         for path_str in [
             self.storage.local_path,
@@ -268,7 +412,7 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
-    def validate_llm_credentials(self) -> "Settings":
+    def validate_llm_credentials(self) -> Settings:
         """Ensure API keys are present for cloud providers.
 
         Note: ollama is a local provider — no API key required.
@@ -284,7 +428,7 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
-    def validate_active_cameras(self) -> "Settings":
+    def validate_active_cameras(self) -> Settings:
         """Warn (not error) if no cameras are configured."""
         active = [c for c in self.cameras if not c.disabled]
         if not active:

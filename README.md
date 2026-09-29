@@ -345,11 +345,53 @@ Argus is being built according to a rigorous 10-phase engineering blueprint:
 - [x] **PHASE 3:** Face Recognition & Embedding DB (InsightFace + FAISS)
 - [x] **PHASE 4:** Recording Engine (Pre-event circular buffer + FFmpeg)
 - [x] **Phase 5: LLM Intelligence** (Laya 421M Gate + Multi-provider LLM + AutoLearner)
-- [ ] **Phase 6: Alert Engine** (Telegram with inline actions, rate limiting, quiet hours)
+- [x] **Phase 6: Alert Engine** (Telegram & Discord with inline actions, rate limiting, quiet hours)
 - [ ] **Phase 7: Storage Manager** (Local retention + async rclone to GDrive/S3)
 - [ ] **Phase 8: Pipeline Orchestrator** (Tying the async workers together)
 - [ ] **Phase 9: Dashboard** (Streamlit UI for live view, events, faces, and settings)
 - [ ] **Phase 10: Docker & CI/CD** (Automated builds, GPU containers, deployment scripts)
+
+## Phase 6: Unified Alert Engine
+
+The Argus Unified Alert Engine is a robust, platform-agnostic async pipeline designed to reliably deliver critical security notifications.
+
+**Architecture:**
+- **Platform Agnostic Models:** All events are unified into `Alert` data classes before dispatching.
+- **Async Queue:** `AlertQueue` manages prioritization (CRITICAL vs INFO).
+- **Rate Limiting:** A `TokenBucketRateLimiter` ensures APIs like Telegram/Discord are not spammed during high-motion events.
+- **Quiet Hours:** Configurable time windows suppress non-critical alerts while holding them in a delayed buffer.
+- **Interactive Prompts:** AutoLearner leverages InteractiveButtons to prompt users to identify unknown faces.
+
+**Feature Comparison**
+
+| Feature | Telegram | Discord |
+|---------|----------|---------|
+| Rich Text Formatting | Yes (HTML) | Yes (Embeds) |
+| Image Attachments | Yes (Photo) | Yes (Files) |
+| Interactive Buttons | Yes (InlineKeyboardMarkup) | Yes (UI Views) |
+| Delivery Speed | Fast | Fast |
+
+**Configuration Example**
+
+```yaml
+alerts:
+  routing: both
+  max_rate_per_second: 5.0
+  quiet_hours:
+    enabled: true
+    start: "23:00"
+    end: "07:00"
+    override_on_suspicious: true
+    action: hold
+  telegram:
+    enabled: true
+    bot_token: "YOUR_BOT_TOKEN"
+    chat_id: "YOUR_CHAT_ID"
+  discord:
+    enabled: true
+    bot_token: "YOUR_BOT_TOKEN"
+    channel_id: 1234567890
+```
 
 ## 📄 License
 
