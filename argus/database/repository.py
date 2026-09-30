@@ -199,11 +199,21 @@ async def create_clip(
     return clip
 
 
-async def update_clip_remote_url(session: AsyncSession, clip_id: int, remote_url: str) -> None:
-    """Set the remote URL after successful cloud upload."""
-    await session.execute(
-        update(Clip).where(Clip.id == clip_id).values(remote_url=remote_url)
+async def update_clip_remote_url(
+    session: AsyncSession,
+    event_id: int,
+    remote_url: str,
+) -> None:
+    """Set the remote_url field on a Clip record identified by event_id."""
+    from argus.database.models import Clip
+    from sqlalchemy import update
+
+    stmt = (
+        update(Clip)
+        .where(Clip.event_id == event_id)
+        .values(remote_url=remote_url)
     )
+    await session.execute(stmt)
 
 
 # ---------------------------------------------------------------------------

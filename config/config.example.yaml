@@ -76,3 +76,23 @@ storage:
   backend: ${STORAGE_BACKEND:local}
   # Delete clips older than X days (0 to disable)
   retention_days: 30
+
+kafka:
+  enabled: true
+  bootstrap_servers: localhost:9092
+  topics:
+    uploads: argus.uploads
+    frames:  argus.frames
+    events:  argus.events
+    learn:   argus.learn
+    dlq:     argus.dlq
+  producer:
+    enable_idempotence: true
+    acks: all
+    compression_type: lz4
+    linger_ms: 5
+  consumer:
+    auto_offset_reset: earliest
+    max_poll_records: 10
+    session_timeout_ms: 30000
+    heartbeat_interval_ms: 10000

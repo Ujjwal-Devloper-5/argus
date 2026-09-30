@@ -14,7 +14,7 @@
 [![Ollama](https://img.shields.io/badge/Ollama-Local_LLM-000000?style=for-the-badge&logo=ollama&logoColor=white)](https://ollama.ai)
 [![Telegram](https://img.shields.io/badge/Telegram-Alerts-26A5E4?style=for-the-badge&logo=telegram&logoColor=white)](https://core.telegram.org/bots)
 [![Discord](https://img.shields.io/badge/Discord-Alerts-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.com/developers)
-[![Tests](https://img.shields.io/badge/Tests-617_Passing-22c55e?style=for-the-badge&logo=pytest&logoColor=white)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-643_Passing-22c55e?style=for-the-badge&logo=pytest&logoColor=white)](#testing)
 [![Coverage](https://img.shields.io/badge/Coverage-81%25-22c55e?style=for-the-badge&logoColor=white)](#testing)
 [![License](https://img.shields.io/badge/License-MIT-f59e0b?style=for-the-badge)](LICENSE)
 
@@ -507,7 +507,7 @@ make benchmark    # FPS benchmark on your hardware
 .venv/bin/python -m pytest --cov=argus --cov-report=html
 ```
 
-Current statistics: **617 tests · 81.79% coverage · 0 ruff/mypy issues**
+Current statistics: **643 tests · 81.41% coverage · 0 ruff/mypy issues**
 All Telegram, Discord, and LLM API calls are fully mocked — CI requires no real credentials.
 
 ---
@@ -523,7 +523,7 @@ All Telegram, Discord, and LLM API calls are fully mocked — CI requires no rea
 | **4 — Recording Engine** | ✅ Done | Pre-event circular buffer + FFmpeg hardware encoding |
 | **5 — LLM Intelligence** | ✅ Done | Laya 421M gate + multi-provider vision LLM + AutoLearner |
 | **6 — Alert Engine** | ✅ Done | Telegram + Discord with priority queue, rate limiting, interactive buttons |
-| **7 — Storage Manager** | 🔜 Next | Kafka-backed async upload to GDrive / S3 / B2 / SFTP via rclone |
+| **7 — Storage Manager** | ✅ Done | Kafka-backed async upload to GDrive / S3 / B2 / SFTP via rclone |
 | **8 — Pipeline Orchestrator** | ⏳ Planned | Kafka-wired async workers into the live system |
 | **9 — Dashboard** | ⏳ Planned | Streamlit: live view, event timeline, face gallery, settings |
 | **10 — Docker + CI/CD** | ⏳ Planned | GPU containers, GitHub Actions, automated publishing |

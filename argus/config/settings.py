@@ -342,6 +342,40 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 # ---------------------------------------------------------------------------
 
 
+class KafkaTopicsConfig(BaseModel):
+    """Topic name overrides — defaults match ArgusTopics enum values."""
+    uploads: str = "argus.uploads"
+    frames: str = "argus.frames"
+    events: str = "argus.events"
+    learn: str = "argus.learn"
+    dlq: str = "argus.dlq"
+
+
+class KafkaProducerConfig(BaseModel):
+    """Producer tuning — idempotent by default for exactly-once semantics."""
+    enable_idempotence: bool = True
+    acks: str = "all"  # Wait for all ISR replicas
+    compression_type: str = "lz4"
+    linger_ms: int = 5
+
+
+class KafkaConsumerConfig(BaseModel):
+    """Consumer tuning — manual commit enforced by ArgusConsumer."""
+    auto_offset_reset: str = "earliest"
+    max_poll_records: int = 10
+    session_timeout_ms: int = 30_000
+    heartbeat_interval_ms: int = 10_000
+
+
+class KafkaConfig(BaseModel):
+    """Apache Kafka connection and topic configuration."""
+    enabled: bool = True
+    bootstrap_servers: str = "localhost:9092"
+    topics: KafkaTopicsConfig = Field(default_factory=KafkaTopicsConfig)
+    producer: KafkaProducerConfig = Field(default_factory=KafkaProducerConfig)
+    consumer: KafkaConsumerConfig = Field(default_factory=KafkaConsumerConfig)
+
+
 class Settings(BaseSettings):
     """
     Root settings model. Reads from .env, environment variables, and config.yaml.
@@ -382,6 +416,7 @@ class Settings(BaseSettings):
     alerts: AlertsConfig = AlertsConfig()
     storage: StorageConfig = StorageConfig()
     dashboard: DashboardConfig = DashboardConfig()
+    kafka: KafkaConfig = Field(default_factory=KafkaConfig)
 
     @model_validator(mode="before")
     @classmethod
