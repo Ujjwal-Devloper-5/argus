@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light mode (rarely used but supported) */
+    --background: 210 20% 96%;
+    --foreground: 220 25% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 25% 10%;
+    --primary: 220 90% 52%;
+    --primary-foreground: 0 0% 100%;
+    --muted: 210 15% 90%;
+    --muted-foreground: 220 10% 45%;
+    --accent: 220 90% 52%;
+    --accent-foreground: 0 0% 100%;
+    --border: 220 15% 85%;
+    --input: 220 15% 85%;
+    --ring: 220 90% 52%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --warning: 38 90% 55%;
+    --success: 142 70% 42%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    /* Default for security dashboard */
+    --background: 222 20% 8%;       /* Deep navy */
+    --foreground: 210 20% 92%;
+    --card: 222 20% 11%;            /* Slightly lighter card */
+    --card-foreground: 210 20% 92%;
+    --popover: 222 20% 11%;
+    --popover-foreground: 210 20% 92%;
+    --primary: 220 90% 60%;         /* Electric blue */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 222 15% 16%;
+    --secondary-foreground: 210 20% 80%;
+    --muted: 222 15% 16%;
+    --muted-foreground: 220 10% 55%;
+    --accent: 220 90% 60%;
+    --accent-foreground: 0 0% 100%;
+    --border: 222 15% 18%;          /* Subtle blue-grey */
+    --input: 222 15% 18%;
+    --ring: 220 90% 60%;
+    --destructive: 0 72% 51%;       /* Alert red */
+    --destructive-foreground: 0 0% 98%;
+    --warning: 38 85% 52%;          /* Amber warning */
+    --success: 142 65% 42%;         /* Green online */
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+  }
+}
+
+/* Security-specific animations */
+@keyframes pulse-red {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(0 72% 51% / 0.4); }
+  50% { box-shadow: 0 0 0 6px hsl(0 72% 51% / 0); }
+}
+@keyframes pulse-green {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(142 65% 42% / 0.4); }
+  50% { box-shadow: 0 0 0 6px hsl(142 65% 42% / 0); }
+}
+.pulse-critical { animation: pulse-red 2s infinite; }
+.pulse-online { animation: pulse-green 3s infinite; }

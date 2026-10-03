@@ -308,19 +308,36 @@ async def main() -> None:
         for orch, stream in zip(orchestrators, stream_workers, strict=True)
     ]
 
+    # ── 9. Start Dashboard Server ─────────────────────────────────────────
+    import uvicorn
+    dashboard_cfg = uvicorn.Config(
+        "argus.dashboard.backend.app:app",
+        host=settings.dashboard.host,
+        port=settings.dashboard.port,
+        log_config=None,  # Use Argus structlog
+    )
+    dashboard_server = uvicorn.Server(dashboard_cfg)
+    dashboard_task = asyncio.create_task(
+        dashboard_server.serve(),
+        name="argus-dashboard"
+    )
+
     logger.info(
         "Argus is running",
         active_cameras=len(active_cameras),
         kafka=kafka_producer is not None,
         storage=storage_manager is not None,
+        dashboard=f"http://{settings.dashboard.host}:{settings.dashboard.port}",
     )
 
-    # ── 9. Wait for shutdown signal ───────────────────────────────────────
+    # ── 10. Wait for shutdown signal ───────────────────────────────────────
     stop_event = asyncio.Event()
 
     def _on_signal(sig: signal.Signals) -> None:
         logger.info("Shutdown signal received", signal=sig.name)
         stop_event.set()
+        # Also tell Uvicorn to exit
+        dashboard_server.should_exit = True
 
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
@@ -328,7 +345,11 @@ async def main() -> None:
 
     await stop_event.wait()
 
-    # ── 10. Graceful shutdown (reverse order) ────────────────────────────
+    # Wait for dashboard to finish shutting down
+    with contextlib.suppress(Exception):
+        await dashboard_task
+
+    # ── 11. Graceful shutdown (reverse order) ────────────────────────────
     logger.info("Shutting down gracefully...")
 
     # Cancel pipeline tasks

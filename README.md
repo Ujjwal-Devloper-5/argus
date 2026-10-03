@@ -162,16 +162,18 @@ callback          ActionRow callback
 
 All uploads are fire-and-forget via a Kafka-backed async queue — the vision pipeline never waits on network I/O.
 
-### Streamlit Dashboard
+### Unified Dashboard (React + FastAPI)
 
-Web UI at `http://localhost:8501`:
+Argus features a built-in enterprise-grade dashboard served automatically at `http://localhost:8501`.
 
-| Page | Capability |
+| Page / Feature | Capability |
 |---|---|
-| **Live** | Real-time multi-camera grid with detection bounding box overlays |
-| **Events** | Paginated timeline — click any event to play clip + view LLM analysis |
-| **Faces** | Known faces gallery — enroll new person by dropping photos |
-| **Settings** | Runtime config editor — cameras, thresholds, alert routing |
+| **Setup Wizard** | Guided first-run wizard to configure cameras, LLMs, DB, and alerts |
+| **Live View** | Real-time multi-camera grid with detection bounding box overlays |
+| **Event Timeline** | Live WebSocket-fed event stream — play clips, read LLM analysis, view faces |
+| **Face Gallery** | Manage known faces and auto-learned strangers — enroll via UI |
+| **System Health** | Live CPU/GPU/RAM metrics + Kafka and pipeline status |
+| **Settings** | Full runtime configuration editor — write back to `config.yaml` |
 
 ---
 
@@ -549,7 +551,7 @@ All Telegram, Discord, and LLM API calls are fully mocked — CI requires no rea
 | **6 — Alert Engine** | ✅ Done | Telegram + Discord with priority queue, rate limiting, interactive buttons |
 | **7 — Storage Manager** | ✅ Done | Kafka-backed async upload to GDrive / S3 / B2 / SFTP via rclone |
 | **8 — Pipeline Orchestrator** | ✅ Done | Kafka-wired EventOrchestrator — live camera → detect → LLM → alert |
-| **9 — Dashboard** | ⏳ Planned | Streamlit: live view, event timeline, face gallery, settings |
+| **9 — Dashboard** | ✅ Done | React/FastAPI: setup wizard, live view, timeline, face gallery, WebSockets |
 | **10 — Docker + CI/CD** | ⏳ Planned | GPU containers, GitHub Actions, automated publishing |
 
 ---
