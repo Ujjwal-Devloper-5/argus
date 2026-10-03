@@ -42,13 +42,15 @@ Argus combines a **two-brain AI decision pipeline** (a fast 421M on-device gate 
 
 | Capability | Technology | Detail |
 |---|---|---|
-| **Person Detection** | YOLOv8 (ultralytics) | GPU-accelerated, configurable confidence, async process isolation |
-| **Motion Pre-filter** | MOG2 Background Subtractor | Skips ~60% of frames before touching the GPU — zero wasted compute |
+| **Live Orchestration** | `EventOrchestrator` | Per-camera async pipeline — all stages wired, running, production-grade |
+| **Person Detection** | YOLOv8 (ultralytics) | GPU-accelerated, configurable confidence threshold, executor-isolated |
+| **Motion Pre-filter** | MOG2 Background Subtractor | Eliminates ~90% of static frames before hitting the GPU |
 | **Face Recognition** | InsightFace + ArcFace | 512-dim embeddings, cosine similarity, sub-millisecond FAISS search |
-| **Multi-Face Tracking** | SORT Tracker | Stable `track_id` across frames — no duplicate alerts per person |
-| **Pre-Event Buffer** | Circular `deque` + FFmpeg | Captures 5 seconds *before* the trigger — never miss the cause |
-| **Hardware Recording** | FFmpeg NVENC / VAAPI | H.264 hardware encoding via async subprocess — pipeline never blocks |
-| **Multi-Camera** | Async `StreamWorker` per camera | Unlimited cameras via asyncio fan-out, each fully isolated |
+| **Multi-Face Tracking** | SORT Tracker | Kalman filter + Hungarian algorithm — stable `track_id` across frames |
+| **Pre-Event Buffer** | Circular `VideoBuffer` + FFmpeg | Captures N seconds *before* the trigger — never miss what caused the alert |
+| **Hardware Recording** | FFmpeg NVENC (RTX) / libx264 | H.264 async subprocess — event loop never blocked during encoding |
+| **Multi-Camera** | Async `StreamWorker` per camera | Unlimited cameras via asyncio tasks, each fully isolated with backoff reconnect |
+| **Graceful Degradation** | `contextlib.suppress` at every stage | Any subsystem failure is logged and skipped — the pipeline never crashes |
 
 ### Two-Brain AI Intelligence
 
@@ -97,17 +99,22 @@ When Argus sees an unrecognised face enough times, it automatically:
 
 ### Apache Kafka — Event Streaming Backbone
 
-Kafka powers the high-throughput async core of Argus:
+Kafka decouples the pipeline's I/O-heavy operations from the real-time vision loop:
 
-| Kafka Topic | Producer | Consumer | Purpose |
-|---|---|---|---|
-| `argus.frames` | StreamWorker | DetectWorker | Raw decoded frames |
-| `argus.detections` | DetectWorker | FaceWorker | YOLO person detections |
-| `argus.events` | EventOrchestrator | AlertManager, StorageManager | Security events |
-| `argus.uploads` | StorageManager | rclone worker | Async video clip upload queue |
-| `argus.learn` | AutoLearner | AlertManager | Face learn prompts |
+| Kafka Topic | Producer | Consumer | Status | Purpose |
+|---|---|---|---|---|
+| `argus.events` | `EventOrchestrator` | `AlertManager`, dashboard | ✅ Live | Security event fan-out |
+| `argus.uploads` | `StorageManager` | rclone worker | ✅ Live | Crash-safe async clip upload queue |
+| `argus.learn` | `AutoLearner` | `AlertManager` | ✅ Live | Face learn prompts |
+| `argus.dlq` | `ArgusConsumer` | Ops monitoring | ✅ Live | Dead letter queue — failed messages after 3 retries |
+| `argus.frames` | `StreamWorker` | GPU worker pool | ⏳ Phase 9+ | Horizontal frame distribution |
 
-This decouples every pipeline stage — cameras, detectors, and alert senders all scale independently, and no data is lost if any component temporarily goes down.
+**Resilience guarantees:**
+- Kafka offsets are committed **only after handler succeeds** — no data loss on crash
+- 3-retry exponential backoff (1s → 5s → 15s) before DLQ
+- Idempotent producer with `acks=all` + LZ4 compression
+- KRaft mode (no Zookeeper) in the included `docker-compose.yml`
+
 
 ### Unified Alert Engine
 
@@ -170,60 +177,74 @@ Web UI at `http://localhost:8501`:
 
 ## Architecture
 
+### Per-Camera Pipeline (live as of Phase 8)
+
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           ARGUS PIPELINE                                │
-│                                                                         │
-│  ┌─────────────┐  frames  ┌──────────────┐  ┌─────────────────────┐   │
-│  │ StreamWorker│──Queue──►│  MOG2 Motion │  │  Apache Kafka       │   │
-│  │ (PyAV/TCP)  │          │  Pre-Filter  │  │  Event Backbone     │   │
-│  │ per camera  │          └──────┬───────┘  └──────────┬──────────┘   │
-│  └─────────────┘                 │ motion?              │              │
-│                                  ▼                      │              │
-│                         ┌────────────────┐              │              │
-│                         │ DetectWorker   │──────────────► argus.frames │
-│                         │ (YOLOv8 GPU)   │              │              │
-│                         └────────┬───────┘  argus.detections           │
-│                                  │◄─────────────────────┘              │
-│                                  ▼                                      │
-│                         ┌────────────────┐  ┌──────────────────────┐  │
-│                         │  FaceWorker    │  │     AutoLearner      │  │
-│                         │ (InsightFace   │  │  quality scoring     │  │
-│                         │  + SORT track) │  │  temporal analysis   │  │
-│                         └────────┬───────┘  └──────────┬───────────┘  │
-│                                  │                      │              │
-│                    known?        │ unknown              │ threshold?   │
-│                    ┌─────────────┤                      │              │
-│                    ▼             ▼                      ▼              │
-│              ┌──────────┐ ┌───────────────┐  ┌─────────────────────┐ │
-│              │ log only │ │ Laya 421M     │  │    AlertManager     │ │
-│              └──────────┘ │ (System 1)    │  │   learn_prompt()    │ │
-│                           └──────┬────────┘  └──────────┬──────────┘ │
-│                                  │ suspicious?           │            │
-│                                  ▼                       │            │
-│                           ┌──────────────┐               │            │
-│                           │ Vision LLM   │               │            │
-│                           │ (System 2)   │               │            │
-│                           └──────┬───────┘               │            │
-│                                  │                        │            │
-│              ┌───────────────────┴────────────────────────┘           │
-│              ▼                   ▼                   ▼                 │
-│    ┌──────────────────┐ ┌───────────────┐ ┌──────────────────────┐   │
-│    │   AlertManager   │ │  Recorder     │ │   StorageManager     │   │
-│    │ Telegram+Discord │ │  pre-buffer   │ │  Kafka upload queue  │   │
-│    │ priority queue   │ │  FFmpeg clip  │ │  rclone → GDrive/S3  │   │
-│    └──────────────────┘ └───────────────┘ └──────────────────────┘   │
-│                                                                         │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │                       SHARED LAYER                              │   │
-│  │   SQLite / PostgreSQL  │  FAISS EmbeddingDB  │  Config          │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │              STREAMLIT DASHBOARD  :8501                         │   │
-│  │   Live View  │  Events + Clips  │  Faces Gallery  │  Settings   │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────┘
+RTSP Camera
+    │
+    ▼
+StreamWorker (PyAV / TCP, async reconnect with exp. backoff)
+    │  asyncio.Queue
+    ▼
+MotionFilter (MOG2) ──── no motion? ──► skip frame
+    │ motion detected
+    ▼
+DetectorWorker (YOLOv8, CUDA) ──── no persons? ──► skip frame
+    │ person detections
+    ▼
+SortTracker (Kalman + Hungarian) ──► stable track_id per person
+    │ tracked detections
+    ▼
+FaceRecognizer (InsightFace + FAISS)
+    │
+    ├── is_known=True ──► update DB last_seen (no alert)
+    │
+    └── is_known=False ──► EventOrchestrator._handle_unknown_face()
+                                │
+                    asyncio.gather (CONCURRENT):
+                    ├── Laya 421M gate (fast, ~33ms, self-hosted)
+                    ├── Vision LLM analysis (Ollama / OpenAI / etc.)
+                    └── EventRecorder.start_recording (FFmpeg NVENC)
+                                │
+                    ┌───────────┴────────────┐
+                    ▼                        ▼
+              DB: Event + Clip       Kafka: argus.events
+              (SQLAlchemy async)     (fan-out to subscribers)
+                    │
+                    ├──► AlertManager ──► Telegram / Discord
+                    ├──► AutoLearner  ──► face quality cache + learn prompt
+                    └──► StorageManager ──► Kafka: argus.uploads ──► rclone
+```
+
+### Application Startup Sequence
+
+```
+python -m argus
+    │
+    ├─ 1. Load Settings (Pydantic-Settings, .env + config.yaml)
+    ├─ 2. Configure structured logging (structlog JSON / pretty)
+    ├─ 3. Print banner
+    ├─ 4. Alembic DB migrations (run_in_executor, non-blocking)
+    ├─ 5. Setup DB engine (SQLAlchemy async)
+    ├─ 6. Start Kafka producer (ArgusProducer, idempotent)
+    ├─ 7. Start AlertManager (Telegram + Discord bots)
+    ├─ 8. Start StorageManager (rclone / local backend + Kafka consumer)
+    ├─ 9. For each active camera → build EventOrchestrator → start pipeline task
+    ├─ 10. Wait for SIGTERM / SIGINT
+    └─ Graceful shutdown (reverse order — storage → alerts → kafka → db)
+```
+
+### Shared Layer
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  PostgreSQL / SQLite  │  FAISS EmbeddingDB  │  Pydantic-Settings│
+│  (SQLAlchemy async)   │  (face vectors)     │  (.env + YAML)    │
+└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│            Apache Kafka (KRaft, no Zookeeper)                   │
+│  argus.events │ argus.uploads │ argus.learn │ argus.dlq         │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -247,29 +268,32 @@ cd argus
 # 2. Create virtual environment
 python -m venv .venv && source .venv/bin/activate
 
-# 3. Install dependencies (CPU)
-pip install -e ".[dev]"
+# 3. Install dependencies
+pip install -e ".[dev]"          # CPU
+pip install -e ".[dev,gpu]"      # NVIDIA GPU (CUDA)
 
-# 4. GPU support (NVIDIA)
-pip install -e ".[dev,gpu]"
-
-# 5. Copy config templates
+# 4. Copy config templates
 cp .env.example .env
 cp config/config.example.yaml config/config.yaml
-$EDITOR config/config.yaml
+$EDITOR config/config.yaml      # add your camera RTSP URL + bot tokens
 
-# 6. Start infrastructure (Kafka + Zookeeper + PostgreSQL)
-docker compose up -d kafka zookeeper postgres
+# 5. Start infrastructure (Kafka KRaft + PostgreSQL — no Zookeeper needed)
+docker compose up -d argus-kafka argus-db
 
-# 7. Run database migrations
+# 6. Run database migrations
 alembic upgrade head
 
-# 8. Enroll a known face (optional)
+# 7. (Optional) Enroll known faces
 python scripts/enroll_face.py --name "Your Name" --images path/to/photos/
 
-# 9. Launch Argus
+# 8. Launch Argus — fully live end-to-end
 python -m argus
 ```
+
+> **Status:** As of Phase 8, `python -m argus` runs the complete pipeline. Point it at any
+> RTSP camera and Argus will detect persons, recognise faces, record clips, and fire
+> Telegram/Discord alerts in real time.
+
 
 ### Docker (Recommended)
 
