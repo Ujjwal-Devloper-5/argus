@@ -19,7 +19,7 @@ except ImportError:
     psutil = None
 
 settings = get_settings()
-router = APIRouter(prefix="/api/system", tags=["system"], dependencies=[Depends(get_auth_dependency(settings))])
+router = APIRouter(prefix="/api/system", tags=["system"], dependencies=[Depends(get_auth_dependency())])
 
 APP_START_TIME = time.time()
 
@@ -84,3 +84,16 @@ async def get_stats():
         kafka_enabled=settings.kafka.enabled,
         db_path=settings.database_url
     )
+
+import sys
+@router.post("/restart")
+async def restart_system():
+    """Restart the entire Argus pipeline dynamically."""
+    # Cleanly exits the process. In a production environment (systemd/Docker), 
+    # it will automatically restart. During local dev, we use os.execv.
+    import threading
+    def _restart():
+        time.sleep(1)
+        os.execv(sys.executable, ['python', '-m', 'argus'])
+    threading.Thread(target=_restart).start()
+    return {"success": True, "message": "Restarting system..."}

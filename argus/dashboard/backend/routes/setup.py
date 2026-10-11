@@ -26,7 +26,7 @@ logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/api/setup", tags=["setup"])
 
 # Paths (relative to project root)
-_PROJECT_ROOT = Path(__file__).resolve().parents[5]  # ~/homelab/argus/
+_PROJECT_ROOT = Path(__file__).resolve().parents[4]  # ~/homelab/argus/
 _CONFIG_YAML = _PROJECT_ROOT / "config" / "config.yaml"
 _ENV_FILE = _PROJECT_ROOT / ".env"
 _USERS_FILE = _PROJECT_ROOT / "data" / ".dashboard_users.json"
@@ -59,22 +59,22 @@ def _user_exists() -> bool:
         return False
 
 
-def _hash_password(password: str) -> str:
-    """Securely hash a dashboard password using PBKDF2-HMAC-SHA256."""
-    salt = secrets.token_hex(16)
-    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 260_000)
-    return f"pbkdf2:sha256:260000:{salt}:{dk.hex()}"
+def _hash_password(password: str) -> dict:
+    """Hash password using PBKDF2-HMAC-SHA256 with 260,000 iterations."""
+    import secrets as _secrets
+    import hashlib as _hashlib
+    salt = _secrets.token_hex(16)
+    dk = _hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt), 260_000)
+    return {"salt": salt, "hash": dk.hex(), "iterations": 260_000}
 
 
-def _verify_password(password: str, stored: str) -> bool:
-    """Verify a password against a stored PBKDF2 hash."""
+def _verify_password(password: str, stored: dict) -> bool:
+    """Verify a password against a stored PBKDF2 hash dict."""
     try:
-        _, algo, iterations, salt, dk_hex = stored.split(":")
-        dk = hashlib.pbkdf2_hmac(
-            algo.split("-")[-1] if "-" in algo else algo.split(":")[-1],
-            password.encode(), salt.encode(), int(iterations),
-        )
-        return secrets.compare_digest(dk.hex(), dk_hex)
+        salt = bytes.fromhex(stored["salt"])
+        iterations = stored.get("iterations", 260_000)
+        dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, iterations)
+        return secrets.compare_digest(dk.hex(), stored["hash"])
     except Exception:
         return False
 
@@ -275,9 +275,12 @@ async def complete_setup(payload: SetupPayload) -> SetupResponse:
         # 4. Create dashboard user
         # ----------------------------------------------------------------
         _USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        pw_hash = _hash_password(payload.dashboard_password)
         users = {
             payload.dashboard_username: {
-                "password_hash": _hash_password(payload.dashboard_password),
+                "salt": pw_hash["salt"],
+                "hash": pw_hash["hash"],
+                "iterations": pw_hash["iterations"],
                 "role": "admin",
             }
         }
@@ -318,9 +321,12 @@ async def create_user(payload: CreateUserPayload) -> SetupResponse:
 
     try:
         _USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        pw_hash = _hash_password(payload.password)
         users = {
             payload.username: {
-                "password_hash": _hash_password(payload.password),
+                "salt": pw_hash["salt"],
+                "hash": pw_hash["hash"],
+                "iterations": pw_hash["iterations"],
                 "role": "admin",
             }
         }

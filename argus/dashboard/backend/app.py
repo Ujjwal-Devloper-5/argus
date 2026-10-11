@@ -18,6 +18,7 @@ from argus.dashboard.backend.routes.events import router as events_router
 from argus.dashboard.backend.routes.faces import router as faces_router
 from argus.dashboard.backend.routes.settings import router as settings_router
 from argus.dashboard.backend.routes.setup import router as setup_router
+from argus.dashboard.backend.auth import router as auth_router
 from argus.dashboard.backend.routes.system import router as system_router
 from argus.dashboard.backend.websocket.events_ws import router as events_ws_router
 from argus.dashboard.backend.websocket.events_ws import ws_kafka_bridge
@@ -67,6 +68,7 @@ app.add_middleware(
 
 # Setup wizard — no auth required (runs before user exists)
 app.include_router(setup_router)
+app.include_router(auth_router)
 
 # Authenticated REST routers
 app.include_router(events_router)

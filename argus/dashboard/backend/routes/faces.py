@@ -16,7 +16,7 @@ from argus.database.models import Event, FaceProfile
 from argus.database.repository import delete_face_profile
 
 settings = get_settings()
-router = APIRouter(prefix="/api/faces", tags=["faces"], dependencies=[Depends(get_auth_dependency(settings))])
+router = APIRouter(prefix="/api/faces", tags=["faces"], dependencies=[Depends(get_auth_dependency())])
 
 @router.get("", response_model=list[FaceProfileResponse])
 async def list_faces():

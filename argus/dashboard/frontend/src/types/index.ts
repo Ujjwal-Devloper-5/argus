@@ -8,7 +8,7 @@ export interface EventSummary {
   thumbnail_path: string | null;
   created_at: string;
   llm_description: string;
-  similarity_score: number;
+  similarity_score: number | null;
 }
 
 export interface EventDetail extends EventSummary {
@@ -18,7 +18,7 @@ export interface EventDetail extends EventSummary {
   camera_id: number;
   action_recommendation: string;
   laya_escalated: boolean;
-  confidence: number;
+  confidence: number | null;
 }
 
 export interface FaceProfile {
@@ -51,16 +51,32 @@ export interface SystemStats {
   db_path: string;
 }
 
+// LiveEvent schema aligned with backend AlertEventWS model
 export interface LiveEvent {
-  event_id: number | null;
-  camera: string;
-  face_hash: string;
+  id: number | null;
+  camera_name: string;
+  severity: Severity;
   is_suspicious: boolean;
-  escalated_by_laya: boolean;
-  confidence: number;
-  llm_description: string;
-  action_recommendation: string;
-  clip_path: string | null;
+  message: string;
   thumbnail_path: string | null;
-  triggered_at: string;
+  created_at: string;
+  // Optional extended fields
+  confidence?: number | null;
+  action_recommendation?: string | null;
+}
+
+export interface Detection {
+  box: [number, number, number, number]; // x1, y1, x2, y2
+  class_name: string;
+  confidence: number;
+  track_id?: number;
+}
+
+export interface UnknownCandidate {
+  id: string;
+  appearance_count: number;
+  first_seen: string;
+  last_seen: string;
+  thumbnail_url: string | null;
+  similarity_to_nearest: number;
 }

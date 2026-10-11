@@ -1,36 +1,49 @@
-import React, { useState } from 'react';
-import { LayoutDashboard, Camera, AlertTriangle, Users, Activity, Settings, Lock, Shield, X, Menu, ChevronRight } from 'lucide-react';
+import React from 'react';
+import { LayoutDashboard, Camera, AlertTriangle, Users, Activity, Settings, Lock, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-
-const navGroups = [
-  {
-    items: [
-      { id: 'overview',  title: 'Overview',     icon: LayoutDashboard, path: '/' },
-      { id: 'live',      title: 'Live View',    icon: Camera, badge: 'LIVE', path: '/live' },
-      { id: 'events',    title: 'Events',       icon: AlertTriangle, badge: 3, path: '/events' },
-    ]
-  },
-  {
-    heading: 'Intelligence',
-    items: [
-      { id: 'faces',     title: 'Face Gallery', icon: Users, path: '/faces' },
-      { id: 'system',    title: 'System Health', icon: Activity, path: '/system' },
-    ]
-  },
-  {
-    heading: 'Configuration',
-    items: [
-      { id: 'settings',  title: 'Settings',     icon: Settings, path: '/settings' },
-    ]
-  }
-];
+import { useLiveEvents } from '../../hooks/useLiveEvents';
+import { apiFetch } from '../../api/client';
 
 export function Sidebar({ activeId, onSelect }: { activeId: string, onSelect: (id: string) => void }) {
   const navigate = useNavigate();
+  const { events, connected } = useLiveEvents();
+
+  const suspiciousCount = events.filter(e => e.is_suspicious).length;
+
+  const navGroups = [
+    {
+      items: [
+        { id: 'overview',  title: 'Overview',     icon: LayoutDashboard, path: '/' },
+        { id: 'live',      title: 'Live View',    icon: Camera, badge: 'LIVE', path: '/live' },
+        { id: 'events',    title: 'Events',       icon: AlertTriangle, badge: suspiciousCount > 0 ? suspiciousCount : undefined, path: '/events' },
+      ]
+    },
+    {
+      heading: 'Intelligence',
+      items: [
+        { id: 'faces',     title: 'Face Gallery', icon: Users, path: '/faces' },
+        { id: 'system',    title: 'System Health', icon: Activity, path: '/system' },
+      ]
+    },
+    {
+      heading: 'Configuration',
+      items: [
+        { id: 'settings',  title: 'Settings',     icon: Settings, path: '/settings' },
+      ]
+    }
+  ];
 
   const handleSelect = (item: any) => {
     onSelect(item.id);
     navigate(item.path || '/');
+  };
+
+  const handleLogout = () => {
+    apiFetch('/api/auth/logout', { method: 'POST' }).then(() => {
+      window.location.href = '/login';
+    }).catch(() => {
+      window.location.href = '/login';
+    });
   };
 
   return (
@@ -44,8 +57,10 @@ export function Sidebar({ activeId, onSelect }: { activeId: string, onSelect: (i
           <div className="text-[11px] text-muted-foreground">Security Operations</div>
         </div>
         <div className="ml-auto flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-success pulse-online" />
-          <span className="text-[10px] text-success font-bold">LIVE</span>
+          <div className={`w-2 h-2 rounded-full ${connected ? 'bg-success pulse-online' : 'bg-muted-foreground'}`} />
+          <span className={`text-[10px] font-bold ${connected ? 'text-success' : 'text-muted-foreground'}`}>
+            {connected ? 'LIVE' : 'OFFLINE'}
+          </span>
         </div>
       </div>
 
@@ -69,7 +84,7 @@ export function Sidebar({ activeId, onSelect }: { activeId: string, onSelect: (i
                     <item.icon className={`w-4 h-4 ${isActive ? 'text-primary' : 'group-hover:text-foreground'}`} />
                     <span className="text-[13px]">{item.title}</span>
                   </div>
-                  {(item as any).badge && (
+                  {(item as any).badge !== undefined && (
                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${(item as any).badge === 'LIVE' ? 'bg-success/20 text-success' : 'bg-primary/20 text-primary'}`}>
                       {(item as any).badge}
                     </span>
@@ -82,7 +97,10 @@ export function Sidebar({ activeId, onSelect }: { activeId: string, onSelect: (i
       </div>
 
       <div className="mt-auto pt-3 border-t border-border">
-        <div className="group flex items-center px-2.5 py-[7.5px] rounded-lg cursor-pointer text-muted-foreground hover:bg-muted hover:text-foreground">
+        <div
+          onClick={handleLogout}
+          className="group flex items-center px-2.5 py-[7.5px] rounded-lg cursor-pointer text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
           <Lock className="w-4 h-4 mr-2.5" />
           <span className="text-[13px]">Lock Dashboard</span>
         </div>

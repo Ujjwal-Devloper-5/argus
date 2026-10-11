@@ -35,18 +35,22 @@ export default function SystemHealth() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-card border border-border rounded-xl p-5">
-          <h2 className="font-bold mb-4">Kafka Infrastructure</h2>
+          <h2 className="font-bold mb-4">Message Bus</h2>
           <div className="flex items-center justify-between py-2 border-b border-border">
-            <span className="text-sm">Broker Status</span>
-            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-success/20 text-success">CONNECTED</span>
-          </div>
-          <div className="flex items-center justify-between py-2 border-b border-border">
-            <span className="text-sm">argus.events Topic</span>
-            <span className="text-sm font-mono text-muted-foreground">12 msg/s</span>
+            <span className="text-sm">Mode</span>
+            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+              stats.kafka_enabled
+                ? 'bg-success/20 text-success'
+                : 'bg-muted text-muted-foreground'
+            }`}>
+              {stats.kafka_enabled ? 'KAFKA' : 'INTERNAL BUS'}
+            </span>
           </div>
           <div className="flex items-center justify-between py-2">
-            <span className="text-sm">Consumer Lag</span>
-            <span className="text-sm font-mono text-muted-foreground">0 msgs</span>
+            <span className="text-sm">Uptime</span>
+            <span className="text-sm font-mono text-muted-foreground">
+              {Math.floor(stats.uptime_seconds / 3600)}h {Math.floor((stats.uptime_seconds % 3600) / 60)}m
+            </span>
           </div>
         </div>
         

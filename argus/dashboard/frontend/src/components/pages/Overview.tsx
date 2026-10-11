@@ -3,7 +3,7 @@ import { StatCard } from '../ui/StatCard';
 import { AlertFeed } from '../ui/AlertFeed';
 import { useLiveEvents } from '../../hooks/useLiveEvents';
 import { useLiveStats } from '../../hooks/useLiveStats';
-import { AlertTriangle, Camera, Bell, Users } from 'lucide-react';
+import { AlertTriangle, Camera, Bell, Users, Activity } from 'lucide-react';
 
 export default function Overview() {
   const { events } = useLiveEvents();
@@ -15,9 +15,9 @@ export default function Overview() {
     <div className="p-6 space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title="Events Today" value={stats.total_events_today} icon={AlertTriangle} />
-        <StatCard title="Cameras Online" value="4 / 4" icon={Camera} />
+        <StatCard title="CPU Usage" value={`${stats.cpu_percent ?? 0}%`} icon={Activity} />
+        <StatCard title="Memory Usage" value={`${stats.memory_percent ?? 0}%`} icon={Activity} />
         <StatCard title="Alerts Sent" value={stats.total_alerts_sent} icon={Bell} />
-        <StatCard title="Faces Enrolled" value="12" icon={Users} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

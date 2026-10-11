@@ -222,7 +222,10 @@ async def main() -> None:
 
     # ── 1. Settings + logging ────────────────────────────────────────────
     settings = get_settings()
-    configure_logging(settings)
+    configure_logging(
+        log_level=settings.log_level,
+        log_format=settings.log_format,
+    )
     print_banner()
 
     logger.info(

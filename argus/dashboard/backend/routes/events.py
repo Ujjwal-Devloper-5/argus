@@ -13,7 +13,7 @@ from argus.database.engine import get_session
 from argus.database.models import Camera, Event
 
 settings = get_settings()
-router = APIRouter(prefix="/api/events", tags=["events"], dependencies=[Depends(get_auth_dependency(settings))])
+router = APIRouter(prefix="/api/events", tags=["events"], dependencies=[Depends(get_auth_dependency())])
 
 def get_severity(event: Event) -> str:
     if event.is_suspicious:

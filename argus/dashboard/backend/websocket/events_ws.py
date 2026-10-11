@@ -6,7 +6,8 @@ import json
 from datetime import UTC, datetime
 
 import structlog
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from argus.dashboard.backend.auth import verify_ws_ticket
 
 from argus.config import get_settings
 from argus.dashboard.backend.models import AlertEventWS
@@ -82,7 +83,10 @@ async def ws_kafka_bridge():
         await consumer.stop()
 
 @router.websocket("")
-async def websocket_endpoint(websocket: WebSocket, token: str | None = None):
+async def websocket_endpoint(websocket: WebSocket, ticket: str = Query(...)):
+    if not verify_ws_ticket(ticket):
+        await websocket.close(code=1008)
+        return
     # Basic token check could be implemented here
     await events_manager.connect(websocket)
     try:

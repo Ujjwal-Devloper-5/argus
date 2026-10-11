@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Sidebar } from './components/shell/Sidebar';
 import { Header } from './components/shell/Header';
 import { CommandPalette } from './components/shell/CommandPalette';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import Overview from './components/pages/Overview';
 import LiveView from './components/pages/LiveView';
 import Events from './components/pages/Events';
@@ -53,13 +54,13 @@ function Dashboard() {
           <Header activeId={activeId} />
           <main className="flex-1 overflow-y-auto">
             <Routes>
-              <Route path="/" element={<Overview />} />
-              <Route path="/live" element={<LiveView />} />
-              <Route path="/events" element={<Events />} />
-              <Route path="/events/:id" element={<EventDetail />} />
-              <Route path="/faces" element={<Faces />} />
-              <Route path="/system" element={<SystemHealth />} />
-              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/" element={<ErrorBoundary><Overview /></ErrorBoundary>} />
+              <Route path="/live" element={<ErrorBoundary><LiveView /></ErrorBoundary>} />
+              <Route path="/events" element={<ErrorBoundary><Events /></ErrorBoundary>} />
+              <Route path="/events/:id" element={<ErrorBoundary><EventDetail /></ErrorBoundary>} />
+              <Route path="/faces" element={<ErrorBoundary><Faces /></ErrorBoundary>} />
+              <Route path="/system" element={<ErrorBoundary><SystemHealth /></ErrorBoundary>} />
+              <Route path="/settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </main>

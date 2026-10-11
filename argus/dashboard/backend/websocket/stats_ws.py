@@ -6,7 +6,8 @@ import time
 from datetime import UTC, datetime
 
 import structlog
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from argus.dashboard.backend.auth import verify_ws_ticket
 from sqlalchemy import func, select
 
 from argus.config import get_settings
