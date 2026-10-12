@@ -81,6 +81,12 @@ async def ws_kafka_bridge():
         await consumer.consume()
     except asyncio.CancelledError:
         await consumer.stop()
+    except Exception as exc:
+        logger.warning("Kafka events consumer unavailable — running fallback heartbeat", error=str(exc))
+        while True:
+            await asyncio.sleep(30)
+            heartbeat = {"type": "heartbeat", "timestamp": datetime.now(UTC).isoformat()}
+            await events_manager.broadcast(json.dumps(heartbeat))
 
 @router.websocket("")
 async def websocket_endpoint(websocket: WebSocket, ticket: str = Query(default="")):
