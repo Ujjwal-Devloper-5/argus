@@ -42,10 +42,15 @@ dist/
 build/
 *.egg-info/
 
+# Node / Frontend
+node_modules/
+*.tsbuildinfo
+
 # Temporary Agent & Test files
 .agents/
 ORIGINAL_REQUEST.md
 measure_speed.sh
 test_full_pipeline.py
-
 test_live_pipeline.py
+fix_*.py
+*upgrade*.py
