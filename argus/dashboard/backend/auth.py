@@ -72,8 +72,8 @@ def _load_users() -> dict:
 def _verify_any(username: str, password: str) -> bool:
     """Tries file-based users first, then config.yaml fallback."""
     users = _load_users()
-    if username in users:
-        return verify_password(password, users[username])
+    if username in users and verify_password(password, users[username]):
+        return True
     # Config fallback
     try:
         settings = get_settings()

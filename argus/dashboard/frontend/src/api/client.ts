@@ -5,11 +5,20 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
       'Content-Type': 'application/json',
       ...options.headers,
     },
+    credentials: 'include', // Ensure cookies are passed
   });
 
   if (response.status === 401) {
-    window.location.href = '/login';
-    throw new Error('Unauthorized');
+    // Notify AuthContext via custom event without causing hard browser page reloads
+    if (typeof window !== 'undefined' && endpoint !== '/api/auth/login') {
+      window.dispatchEvent(new CustomEvent('argus:unauthorized'));
+    }
+    let errorMsg = 'Unauthorized';
+    try {
+      const errData = await response.json();
+      errorMsg = errData.detail || errorMsg;
+    } catch {}
+    throw new Error(errorMsg);
   }
 
   if (!response.ok) {
@@ -17,7 +26,7 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
     try {
       const errData = await response.json();
       errorMsg = errData.detail || errorMsg;
-    } catch (e) {}
+    } catch {}
     throw new Error(errorMsg);
   }
 

@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import asyncio
 import math
+import time
 from collections.abc import Sequence
 from concurrent.futures import Executor, ThreadPoolExecutor
 from typing import Any
 
+import cv2
 import numpy as np
 import structlog
 from pydantic import (
@@ -227,6 +229,15 @@ class FaceRecognizer:
             self.app = FaceAnalysis(name=model_name, providers=self.providers)
             self.app.prepare(ctx_id=ctx_id, det_thresh=det_thresh, det_size=det_size)
 
+        # Limit CPU threads to prevent system CPU saturation
+        try:
+            import torch
+            torch.set_num_threads(2)
+            torch.set_num_interop_threads(1)
+        except Exception:
+            pass
+
+        self._track_cache: dict[int, tuple[float, FaceMatch, float]] = {}
         self._custom_executor = executor is not None
         self._executor = executor or ThreadPoolExecutor(
             max_workers=1,
@@ -384,6 +395,17 @@ class FaceRecognizer:
 
         return None
 
+    @staticmethod
+    def _compute_sharpness(crop: np.ndarray) -> float:
+        """Score image sharpness using Laplacian variance."""
+        if crop is None or crop.size == 0:
+            return 0.0
+        try:
+            gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY) if crop.ndim == 3 else crop
+            return float(cv2.Laplacian(gray, cv2.CV_64F).var())
+        except Exception:
+            return 50.0
+
     def _process_frame_sync(
         self,
         frame: np.ndarray,
@@ -391,11 +413,16 @@ class FaceRecognizer:
     ) -> list[FaceMatch]:
         """
         Synchronous processing loop executed within the thread pool executor.
+        Applies track-level caching and sharpness gating to eliminate redundant ArcFace passes.
         """
         h, w = frame.shape[:2]
         matches: list[FaceMatch] = []
+        now = time.monotonic()
 
         for det in detections:
+            track_id = getattr(det, "track_id", None)
+            cached_entry = self._track_cache.get(track_id) if track_id is not None else None
+
             # Clip bounding box coordinates to frame boundaries
             x1 = max(0, min(det.x1, w))
             y1 = max(0, min(det.y1, h))
@@ -415,18 +442,47 @@ class FaceRecognizer:
                 continue
 
             crop = frame[y1:y2, x1:x2]
+            crop_sharpness = self._compute_sharpness(crop)
+
+            # If we already extracted an embedding for this track within 1.5s,
+            # and current crop isn't significantly sharper (> 1.5x), reuse cached match
+            if cached_entry is not None:
+                cached_ts, cached_match, cached_sharp = cached_entry
+                if (now - cached_ts < 1.5) and (cached_match.embedding is not None) and (crop_sharpness <= cached_sharp * 1.5):
+                    reused = FaceMatch(
+                        detection=det,
+                        embedding=cached_match.embedding,
+                        similarity=cached_match.similarity,
+                        is_known=cached_match.is_known,
+                        profile_id=cached_match.profile_id,
+                    )
+                    matches.append(reused)
+                    continue
+
             embedding = self._extract_embedding_from_crop(crop)
 
             if embedding is None:
-                matches.append(
-                    FaceMatch(
-                        detection=det,
-                        embedding=None,
-                        similarity=0.0,
-                        is_known=False,
-                        profile_id=None,
+                if cached_entry is not None and cached_entry[1].embedding is not None:
+                    cached_match = cached_entry[1]
+                    matches.append(
+                        FaceMatch(
+                            detection=det,
+                            embedding=cached_match.embedding,
+                            similarity=cached_match.similarity,
+                            is_known=cached_match.is_known,
+                            profile_id=cached_match.profile_id,
+                        )
                     )
-                )
+                else:
+                    matches.append(
+                        FaceMatch(
+                            detection=det,
+                            embedding=None,
+                            similarity=0.0,
+                            is_known=False,
+                            profile_id=None,
+                        )
+                    )
                 continue
 
             # Query the embedding database
@@ -439,15 +495,18 @@ class FaceRecognizer:
             is_known = bool(matched_id is not None and similarity >= self.similarity_threshold)
             profile_id = matched_id if is_known else None
 
-            matches.append(
-                FaceMatch(
-                    detection=det,
-                    embedding=embedding,
-                    similarity=similarity,
-                    is_known=is_known,
-                    profile_id=profile_id,
-                )
+            match = FaceMatch(
+                detection=det,
+                embedding=embedding,
+                similarity=similarity,
+                is_known=is_known,
+                profile_id=profile_id,
             )
+            matches.append(match)
+
+            # Update track recognition cache
+            if track_id is not None:
+                self._track_cache[track_id] = (now, match, crop_sharpness)
 
         return matches
 

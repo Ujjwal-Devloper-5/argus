@@ -7,6 +7,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from argus.config import get_settings
 from argus.dashboard.backend.app import app
 from argus.dashboard.backend.auth import (
     create_ws_ticket,
@@ -14,6 +15,15 @@ from argus.dashboard.backend.auth import (
     verify_password,
     verify_ws_ticket,
 )
+
+
+@pytest.fixture
+def auth_creds():
+    settings = get_settings()
+    return {
+        "username": settings.dashboard.username,
+        "password": settings.dashboard.password.get_secret_value(),
+    }
 
 
 @pytest.fixture
@@ -44,9 +54,9 @@ def test_single_use_ws_ticket():
     assert verify_ws_ticket(ticket) is False
 
 
-def test_login_and_cookie_auth(client):
-    # Test valid login with config default credentials
-    res = client.post("/api/auth/login", json={"username": "admin", "password": "changeme"})
+def test_login_and_cookie_auth(client, auth_creds):
+    # Test valid login with config credentials
+    res = client.post("/api/auth/login", json=auth_creds)
     assert res.status_code == 200
     assert res.json()["success"] is True
     assert "argus_token" in res.cookies
@@ -54,7 +64,7 @@ def test_login_and_cookie_auth(client):
     # Test me endpoint with cookie
     me_res = client.get("/api/auth/me", cookies=res.cookies)
     assert me_res.status_code == 200
-    assert me_res.json()["username"] == "admin"
+    assert me_res.json()["username"] == auth_creds["username"]
 
     # Test ticket issuance with authenticated session
     ticket_res = client.get("/api/auth/ticket", cookies=res.cookies)
@@ -73,9 +83,9 @@ def test_spa_path_traversal_containment(client):
     assert "root:" not in res2.text
 
 
-def test_camera_list_masks_credentials(client):
+def test_camera_list_masks_credentials(client, auth_creds):
     # Log in first
-    login_res = client.post("/api/auth/login", json={"username": "admin", "password": "changeme"})
+    login_res = client.post("/api/auth/login", json=auth_creds)
     cookies = login_res.cookies
 
     res = client.get("/api/cameras", cookies=cookies)
@@ -89,8 +99,8 @@ def test_camera_list_masks_credentials(client):
             assert "***:***@" in cam["rtsp_url"]
 
 
-def test_event_stats_endpoint(client):
-    login_res = client.post("/api/auth/login", json={"username": "admin", "password": "changeme"})
+def test_event_stats_endpoint(client, auth_creds):
+    login_res = client.post("/api/auth/login", json=auth_creds)
     cookies = login_res.cookies
 
     res = client.get("/api/events/stats", cookies=cookies)

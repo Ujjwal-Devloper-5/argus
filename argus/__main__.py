@@ -20,10 +20,24 @@ Settings is loaded.
 """
 from __future__ import annotations
 
+import os
+os.environ["OMP_NUM_THREADS"] = "2"
+os.environ["OPENBLAS_NUM_THREADS"] = "2"
+os.environ["MKL_NUM_THREADS"] = "2"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "2"
+os.environ["NUMEXPR_NUM_THREADS"] = "2"
+
 import asyncio
 import contextlib
 import signal
 from pathlib import Path
+
+try:
+    import torch
+    torch.set_num_threads(2)
+    torch.set_num_interop_threads(1)
+except ImportError:
+    pass
 
 import structlog
 
@@ -155,13 +169,13 @@ async def _build_camera_orchestrator(
     motion = MotionFilter.from_camera(camera)
 
     # YOLO detector
-    detector = DetectorWorker(settings.detection)
+    detector = DetectorWorker.from_config(settings.detection)
 
     # SORT tracker (one per camera, stateful)
     tracker = SortTracker()
 
     # Face recognition (InsightFace + FAISS)
-    embedding_db = EmbeddingDB(settings)
+    embedding_db = EmbeddingDB()
     recognizer = FaceRecognizer.from_config(settings.recognition, db=embedding_db)
 
     # Clip recorder (FFmpeg, NVENC-accelerated)
@@ -288,16 +302,19 @@ async def main() -> None:
             )
 
     # ── 8. Launch stream workers + orchestrator run loops ─────────────────
+    from argus.core.frame_hub import frame_hub
+
     async def _run_camera(orch, stream) -> None:
         cam = orch._camera.name
+        frame_hub.register_pipeline_camera(cam)
         try:
-            await stream.start()
-            await orch.run()
+            await asyncio.gather(stream.start(), orch.run())
         except asyncio.CancelledError:
             pass
         except Exception as exc:
             logger.error("Camera pipeline crashed", camera=cam, error=str(exc))
         finally:
+            frame_hub.unregister_pipeline_camera(cam)
             with contextlib.suppress(Exception):
                 await stream.stop()
             with contextlib.suppress(Exception):

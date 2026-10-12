@@ -43,6 +43,7 @@ import numpy as np
 import structlog
 
 from argus.alerts.models import Alert, AlertKind, AlertSeverity
+from argus.core.frame_hub import frame_hub
 from argus.intelligence.base import SAFE_FALLBACK
 
 if TYPE_CHECKING:
@@ -121,6 +122,9 @@ class EventOrchestrator:
         self._event_count: int = 0
         self._recording_active: bool = False
         self._last_detection_ts: float = 0.0
+        self._track_last_event: dict[int, float] = {}
+        self._identity_last_event: dict[str, float] = {}
+        self._last_event_ts: float = 0.0
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -177,6 +181,7 @@ class EventOrchestrator:
                 continue
 
             self._frame_count += 1
+            frame_hub.publish_frame(self._camera.name, frame)
 
             # ── Stage 1: Motion pre-filter (cheap CPU, eliminates ~90% of frames) ──
             has_motion = await self._motion.has_motion_async(frame)
@@ -184,19 +189,35 @@ class EventOrchestrator:
                 await self._check_recording_timeout()
                 continue
 
-            # ── Stage 2: Object detection (YOLO on GPU/CPU) ──────────────────────
-            detections = await self._safe_detect(frame)
-            persons = [d for d in detections if d.class_name == "person"]
-            if not persons:
-                await self._check_recording_timeout()
-                continue
+            # ── Stage 2 & 3: Object detection & Adaptive Keyframe Tracking ───────
+            # Run YOLO keyframe every 3rd frame (5 FPS), or when no active tracks exist
+            is_keyframe = (self._frame_count % 3 == 0) or (self._tracker.active_tracks_count == 0)
 
-            log.debug("Persons detected", count=len(persons), frame=self._frame_count)
+            if is_keyframe:
+                detections = await self._safe_detect(frame)
+                persons = [d for d in detections if d.class_name == "person"]
+                if not persons:
+                    if self._tracker.active_tracks_count > 0:
+                        await self._safe_track([])
+                    await self._check_recording_timeout()
+                    continue
+                tracked = await self._safe_track(persons)
+            else:
+                # Sub-millisecond Kalman filter prediction on intermediate frames
+                predicted = await self._safe_predict_tracks()
+                persons = [d for d in predicted if d.class_name == "person"]
+                if not persons:
+                    # Keyframe fallback if tracks were lost or newly entering
+                    detections = await self._safe_detect(frame)
+                    persons = [d for d in detections if d.class_name == "person"]
+                    if not persons:
+                        await self._check_recording_timeout()
+                        continue
+                    tracked = await self._safe_track(persons)
+                else:
+                    tracked = persons
 
-            # ── Stage 3: SORT tracking (persistent track IDs) ────────────────────
-            tracked = await self._safe_track(persons)
-
-            # ── Stage 4: Face recognition (InsightFace + FAISS) ──────────────────
+            # ── Stage 4: Face recognition (InsightFace + FAISS with track cache) ──
             face_matches = await self._safe_recognize(frame, tracked)
 
             # ── Stage 5: Buffer frame for pre-event clip ──────────────────────────
@@ -240,6 +261,16 @@ class EventOrchestrator:
         except Exception as exc:
             logger.warning("Tracker error", camera=self._camera.name, error=str(exc))
             return detections  # fail-open: return untracked detections
+
+    async def _safe_predict_tracks(self) -> list[Detection]:
+        try:
+            loop = asyncio.get_running_loop()
+            if hasattr(self._tracker, "predict_tracks"):
+                return await loop.run_in_executor(None, self._tracker.predict_tracks)
+            return []
+        except Exception as exc:
+            logger.warning("Tracker predict error", camera=self._camera.name, error=str(exc))
+            return []
 
     async def _safe_recognize(
         self, frame: np.ndarray, detections: list[Detection]
@@ -291,6 +322,56 @@ class EventOrchestrator:
           6.  AutoLearner face tracking
           7.  Enqueue clip for cloud upload (argus.uploads)
         """
+        now = time.monotonic()
+        raw_track_id = getattr(getattr(match, "detection", None), "track_id", None)
+        track_id = raw_track_id if isinstance(raw_track_id, int) else None
+        cooldown = max(15.0, float(getattr(getattr(self._settings, "alerts", None), "cooldown_seconds", 30)))
+
+        # Resolve identity cluster hash if embedding is present
+        face_hash = None
+        if match.embedding is not None and hasattr(self._learner, "resolve_cluster_hash"):
+            try:
+                fn = getattr(self._learner, "resolve_cluster_hash")
+                if callable(fn) and not asyncio.iscoroutinefunction(fn) and not type(fn).__name__.startswith("AsyncMock"):
+                    res = fn(match.embedding)
+                    if isinstance(res, (tuple, list)) and len(res) == 2:
+                        face_hash = res[0]
+            except Exception:
+                face_hash = None
+
+        # Check track and identity cooldown
+        suppress_event = False
+        if face_hash is not None:
+            last_id_ts = self._identity_last_event.get(face_hash, 0.0)
+            if now - last_id_ts < cooldown:
+                suppress_event = True
+        elif track_id is not None:
+            last_track_ts = self._track_last_event.get(track_id, 0.0)
+            if now - last_track_ts < cooldown:
+                suppress_event = True
+        elif self._last_event_ts > 0.0 and (now - self._last_event_ts < cooldown):
+            suppress_event = True
+
+        # Always update AutoLearner so learning accumulates smoothly
+        with contextlib.suppress(Exception):
+            await self._learner.track_unknown(
+                face_match=match,
+                camera_name=self._camera.name,
+                frame=frame,
+            )
+
+        # If suppressed by cooldown, keep clip recording alive and return without creating duplicate events
+        if suppress_event:
+            await self._ensure_recording(frame)
+            return
+
+        # Record timestamps for new event incident
+        if face_hash:
+            self._identity_last_event[face_hash] = now
+        if track_id is not None:
+            self._track_last_event[track_id] = now
+        self._last_event_ts = now
+
         self._event_count += 1
         log = logger.bind(
             camera=self._camera.name,
@@ -358,13 +439,6 @@ class EventOrchestrator:
             is_suspicious=is_suspicious,
         )
 
-        # ── 6. AutoLearner ─────────────────────────────────────────────────
-        with contextlib.suppress(Exception):
-            await self._learner.track_unknown(
-                face_match=match,
-                camera_name=self._camera.name,
-                frame=frame,
-            )
 
         # ── 7. Cloud upload via Kafka argus.uploads ────────────────────────
         if clip_path and self._storage and event_id:
@@ -491,6 +565,19 @@ class EventOrchestrator:
                     camera=self._camera.name,
                     is_suspicious=is_suspicious,
                 )
+
+                # Broadcast directly to connected WebSocket clients for instant zero-latency UI update
+                with contextlib.suppress(Exception):
+                    from argus.dashboard.backend.websocket.events_ws import broadcast_event
+                    await broadcast_event({
+                        "id": event.id,
+                        "camera_name": self._camera.name,
+                        "is_suspicious": is_suspicious,
+                        "thumbnail_path": thumbnail_path,
+                        "created_at": event.triggered_at.isoformat() if hasattr(event.triggered_at, "isoformat") else datetime.now(UTC).isoformat(),
+                        "message": getattr(llm_result, "description", None) or "Unknown person detected",
+                    })
+
                 return event.id
         except Exception as exc:
             logger.error(

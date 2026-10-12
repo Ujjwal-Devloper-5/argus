@@ -33,6 +33,7 @@ def settings(tmp_path, monkeypatch) -> Settings:
     # Clear the lru_cache so each test gets a fresh Settings instance
     get_settings.cache_clear()
 
+    monkeypatch.setenv("ARGUS__CAMERAS", "[]")
     monkeypatch.setenv("ARGUS__DATABASE_URL", "sqlite+aiosqlite:///:memory:?uri=true")
     monkeypatch.setenv("ARGUS__LLM__PROVIDER", "disabled")
     monkeypatch.setenv("ARGUS__ALERTS__TELEGRAM__ENABLED", "false")

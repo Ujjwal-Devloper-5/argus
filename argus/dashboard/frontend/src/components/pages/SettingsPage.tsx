@@ -32,8 +32,23 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
-  const [streamTestResult, setStreamTestResult] = useState<{ cam: string; success: boolean; msg: string } | null>(null);
+  const [streamTestResult, setStreamTestResult] = useState<{
+    cam: string;
+    success: boolean;
+    msg: string;
+    codec?: string;
+    resolution?: string;
+    fps?: number;
+    preview_base64?: string;
+  } | null>(null);
   const [testingStream, setTestingStream] = useState<string | null>(null);
+  const [testingStorage, setTestingStorage] = useState(false);
+  const [storageTestResult, setStorageTestResult] = useState<{
+    success: boolean;
+    msg: string;
+    free_gb?: number;
+    total_gb?: number;
+  } | null>(null);
 
   useEffect(() => {
     loadSettings();
@@ -84,15 +99,51 @@ export default function SettingsPage() {
     setTestingStream(camName);
     setStreamTestResult(null);
     try {
-      const res = await apiFetch<{ success: boolean; message: string }>('/api/cameras/test-stream', {
+      const res = await apiFetch<any>('/api/cameras/test-stream', {
         method: 'POST',
-        body: JSON.stringify({ rtsp_url: rtspUrl, timeout_seconds: 5 }),
+        body: JSON.stringify({ rtsp_url: rtspUrl, timeout_seconds: 6 }),
       });
-      setStreamTestResult({ cam: camName, success: res.success, msg: res.message });
+      setStreamTestResult({
+        cam: camName,
+        success: res.success,
+        msg: res.message,
+        codec: res.codec,
+        resolution: res.resolution,
+        fps: res.fps,
+        preview_base64: res.preview_base64,
+      });
     } catch (err: any) {
       setStreamTestResult({ cam: camName, success: false, msg: err.message || 'Connection failed' });
     } finally {
       setTestingStream(null);
+    }
+  };
+
+  const testStorageConnection = async () => {
+    setTestingStorage(true);
+    setStorageTestResult(null);
+    try {
+      const res = await apiFetch<any>('/api/settings/test-storage', {
+        method: 'POST',
+        body: JSON.stringify({
+          backend: config?.storage?.backend || 'local',
+          local_path: config?.storage?.local_path || './data/clips',
+          recordings_path: config?.storage?.recordings_path || config?.recordings_path || 'argus/data/recordings',
+          rclone_remote: config?.storage?.rclone_remote || '',
+          rclone_path: config?.storage?.rclone_path || '',
+        }),
+      });
+      const backendDetail = res?.details?.[res.backend] || {};
+      setStorageTestResult({
+        success: res.success,
+        msg: backendDetail.message || (res.success ? 'Storage verified successfully' : 'Verification failed'),
+        free_gb: backendDetail.free_gb,
+        total_gb: backendDetail.total_gb,
+      });
+    } catch (err: any) {
+      setStorageTestResult({ success: false, msg: err.message || 'Storage check failed' });
+    } finally {
+      setTestingStorage(false);
     }
   };
 
@@ -226,14 +277,48 @@ export default function SettingsPage() {
 
                       {streamTestResult && streamTestResult.cam === cam.name && (
                         <div
-                          className={`text-xs p-2.5 rounded-lg border flex items-center gap-2 ${
+                          className={`text-xs p-3 rounded-lg border space-y-2 ${
                             streamTestResult.success
                               ? 'bg-success/10 text-success border-success/30'
                               : 'bg-destructive/10 text-destructive border-destructive/30'
                           }`}
                         >
-                          {streamTestResult.success ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-                          <span>{streamTestResult.msg}</span>
+                          <div className="flex items-center gap-2">
+                            {streamTestResult.success ? <CheckCircle className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+                            <span className="font-semibold">{streamTestResult.msg}</span>
+                          </div>
+
+                          {streamTestResult.preview_base64 && (
+                            <div className="mt-2 space-y-2 pt-1 border-t border-success/20">
+                              <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono">
+                                {streamTestResult.resolution && (
+                                  <span className="px-2 py-0.5 rounded bg-success/20 font-bold text-success">
+                                    {streamTestResult.resolution}
+                                  </span>
+                                )}
+                                {streamTestResult.codec && (
+                                  <span className="px-2 py-0.5 rounded bg-card/80 border border-border uppercase">
+                                    {streamTestResult.codec}
+                                  </span>
+                                )}
+                                {streamTestResult.fps && (
+                                  <span className="px-2 py-0.5 rounded bg-card/80 border border-border">
+                                    {streamTestResult.fps} FPS
+                                  </span>
+                                )}
+                              </div>
+                              <div className="relative rounded-lg overflow-hidden border border-border/80 bg-black aspect-video max-w-sm shadow-inner">
+                                <img
+                                  src={streamTestResult.preview_base64}
+                                  alt="Live RTSP Probe Snapshot"
+                                  className="w-full h-full object-contain"
+                                />
+                                <span className="absolute bottom-1 right-2 text-[10px] bg-black/80 backdrop-blur-sm text-white px-1.5 py-0.5 rounded">
+                                  Live Camera Snapshot
+                                </span>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -630,7 +715,7 @@ export default function SettingsPage() {
               <div className="space-y-6 max-w-xl">
                 <div className="border-b border-border pb-3">
                   <h2 className="text-base font-bold">Storage & Retention Policy</h2>
-                  <p className="text-xs text-muted-foreground">Manage disk quota, incident MP4 clips, and cloud replication</p>
+                  <p className="text-xs text-muted-foreground">Manage disk quota, local MP4 incident clips, and multi-cloud sync</p>
                 </div>
 
                 <div className="space-y-4 text-xs">
@@ -652,6 +737,7 @@ export default function SettingsPage() {
                       }
                       className="w-full bg-background border border-border rounded-lg px-3 py-1.5 text-xs outline-none"
                     />
+                    <p className="text-[11px] text-muted-foreground mt-1">Clips older than this threshold will be automatically pruned during daily sweeps.</p>
                   </div>
 
                   <div>
@@ -666,9 +752,129 @@ export default function SettingsPage() {
                       }
                       className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs outline-none"
                     >
-                      <option value="local">Local Filesystem Only</option>
-                      <option value="rclone">Rclone Multi-Cloud (Google Drive, S3, B2)</option>
+                      <option value="local">Local Filesystem Only (NAS / HDD / NVMe)</option>
+                      <option value="rclone">Rclone Multi-Cloud (Google Drive, AWS S3, Backblaze B2, SFTP)</option>
                     </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-medium text-foreground mb-1">Local Incident Clips Path</label>
+                    <input
+                      type="text"
+                      placeholder="./data/clips"
+                      value={config?.storage?.local_path || './data/clips'}
+                      onChange={(e) =>
+                        setConfig({
+                          ...config,
+                          storage: {
+                            ...(config?.storage || {}),
+                            local_path: e.target.value,
+                          },
+                        })
+                      }
+                      className="w-full bg-background border border-border rounded-lg px-3 py-1.5 text-xs outline-none font-mono"
+                    />
+                    <p className="text-[11px] text-muted-foreground mt-1">Target folder where archived incident video clips are preserved.</p>
+                  </div>
+
+                  <div>
+                    <label className="block font-medium text-foreground mb-1">Continuous Buffer / Recordings Directory</label>
+                    <input
+                      type="text"
+                      placeholder="argus/data/recordings"
+                      value={config?.storage?.recordings_path || config?.recordings_path || 'argus/data/recordings'}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setConfig({
+                          ...config,
+                          recordings_path: val,
+                          storage: {
+                            ...(config?.storage || {}),
+                            recordings_path: val,
+                          },
+                        });
+                      }}
+                      className="w-full bg-background border border-border rounded-lg px-3 py-1.5 text-xs outline-none font-mono"
+                    />
+                    <p className="text-[11px] text-muted-foreground mt-1">Working directory where real-time FFmpeg chunk buffers and pre-buffers are written.</p>
+                  </div>
+
+                  {config?.storage?.backend === 'rclone' && (
+                    <div className="p-4 border border-border rounded-xl bg-muted/20 space-y-3">
+                      <div className="font-bold text-sm text-foreground">Cloud Sync (Rclone Remote)</div>
+                      <div>
+                        <label className="block text-muted-foreground mb-1">Rclone Remote & Bucket</label>
+                        <input
+                          type="text"
+                          placeholder="gdrive:Security/Argus or s3:my-bucket/argus"
+                          value={config?.storage?.rclone_remote || ''}
+                          onChange={(e) =>
+                            setConfig({
+                              ...config,
+                              storage: {
+                                ...(config?.storage || {}),
+                                rclone_remote: e.target.value,
+                              },
+                            })
+                          }
+                          className="w-full bg-background border border-border rounded-lg px-3 py-1.5 text-xs outline-none font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-muted-foreground mb-1">Remote Subfolder (Optional)</label>
+                        <input
+                          type="text"
+                          placeholder="clips"
+                          value={config?.storage?.rclone_path || ''}
+                          onChange={(e) =>
+                            setConfig({
+                              ...config,
+                              storage: {
+                                ...(config?.storage || {}),
+                                rclone_path: e.target.value,
+                              },
+                            })
+                          }
+                          className="w-full bg-background border border-border rounded-lg px-3 py-1.5 text-xs outline-none font-mono"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={testStorageConnection}
+                      disabled={testingStorage}
+                      className="flex items-center gap-2 px-3 py-2 bg-muted hover:bg-muted/80 text-foreground border border-border rounded-lg text-xs font-semibold transition"
+                    >
+                      <HardDrive className={`w-3.5 h-3.5 ${testingStorage ? 'animate-spin text-primary' : 'text-primary'}`} />
+                      {testingStorage ? 'Verifying Storage...' : 'Test Storage & Check Disk Space'}
+                    </button>
+
+                    {storageTestResult && (
+                      <div
+                        className={`mt-3 p-3 rounded-lg border text-xs space-y-1 ${
+                          storageTestResult.success
+                            ? 'bg-success/10 text-success border-success/30'
+                            : 'bg-destructive/10 text-destructive border-destructive/30'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 font-bold">
+                          {storageTestResult.success ? (
+                            <CheckCircle className="w-4 h-4 text-success" />
+                          ) : (
+                            <AlertCircle className="w-4 h-4 text-destructive" />
+                          )}
+                          <span>{storageTestResult.msg}</span>
+                        </div>
+                        {storageTestResult.free_gb !== undefined && (
+                          <div className="text-[11px] opacity-90 pl-5">
+                            Available Disk Space: <strong>{storageTestResult.free_gb} GB</strong> / {storageTestResult.total_gb} GB
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

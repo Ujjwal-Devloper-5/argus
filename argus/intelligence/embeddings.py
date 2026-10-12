@@ -36,6 +36,9 @@ class EmbeddingDB:
         Args:
             dimension: Dimensionality of embedding vectors (default 512).
         """
+        if not isinstance(dimension, int) or isinstance(dimension, bool):
+            dimension = DEFAULT_EMBEDDING_DIM
+
         if dimension <= 0:
             raise ValueError(f"dimension must be a positive integer, got {dimension}")
 

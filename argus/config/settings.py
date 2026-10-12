@@ -16,6 +16,7 @@ Usage:
 from __future__ import annotations
 
 import functools
+import os
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -225,7 +226,7 @@ class AlertsConfig(BaseModel):
     """Alert routing and throttling settings."""
 
     cooldown_seconds: Annotated[int, Field(ge=0, le=3600)] = 60
-    routing: Literal["telegram", "discord", "both"] = "both"
+    routing: Literal["telegram", "discord", "both", "none"] = "both"
     max_rate_per_second: Annotated[float, Field(gt=0.0, le=1000.0, allow_inf_nan=False)] = 30.0
     quiet_hours: QuietHoursConfig = Field(default_factory=QuietHoursConfig)
     telegram: TelegramConfig = Field(default_factory=TelegramConfig)
@@ -422,7 +423,8 @@ class Settings(BaseSettings):
     @classmethod
     def load_yaml_config(cls, values: Any) -> Any:
         """Merge config.yaml into settings before validation."""
-        config_path = Path("config/config.yaml")
+        config_path_str = os.environ.get("ARGUS_CONFIG_PATH", "config/config.yaml")
+        config_path = Path(config_path_str)
         if config_path.exists():
             with config_path.open() as f:
                 yaml_data = yaml.safe_load(f) or {}

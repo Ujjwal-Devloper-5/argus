@@ -358,6 +358,32 @@ class SortTracker:
 
             return updated_detections
 
+    def predict_tracks(self) -> list[Detection]:
+        """
+        Advance and return bounding box estimates for active tracks
+        without running heavy object detection inference.
+        Used for sub-millisecond tracking on non-keyframe frames.
+        """
+        with self._lock:
+            predicted_detections: list[Detection] = []
+            valid_trackers: list[KalmanBoxTracker] = []
+            for trk in self.trackers:
+                pos = trk.predict()
+                if trk.is_valid() and not np.any(np.isnan(pos)) and not np.any(np.isinf(pos)):
+                    valid_trackers.append(trk)
+                    x1, y1, x2, y2 = int(round(pos[0])), int(round(pos[1])), int(round(pos[2])), int(round(pos[3]))
+                    if x2 > x1 and y2 > y1 and trk.time_since_update <= 3:
+                        predicted_detections.append(
+                            Detection(
+                                box=(x1, y1, x2, y2),
+                                confidence=0.85,
+                                class_name=trk.class_name,
+                                track_id=trk.id,
+                            )
+                        )
+            self.trackers = valid_trackers
+            return predicted_detections
+
     def reset(self) -> None:
         """Reset all active tracks and the track ID sequence."""
         with self._lock:

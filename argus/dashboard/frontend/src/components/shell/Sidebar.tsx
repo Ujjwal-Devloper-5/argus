@@ -2,35 +2,40 @@ import React from 'react';
 import { LayoutDashboard, Camera, AlertTriangle, Users, Activity, Settings, Lock, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useLiveEvents } from '../../hooks/useLiveEvents';
-import { apiFetch } from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 
-export function Sidebar({ activeId, onSelect }: { activeId: string, onSelect: (id: string) => void }) {
+export function Sidebar({ activeId, onSelect }: { activeId: string; onSelect: (id: string) => void }) {
   const navigate = useNavigate();
   const { events, connected } = useLiveEvents();
+  const { logout } = useAuth();
 
-  const suspiciousCount = events.filter(e => e.is_suspicious).length;
+  const suspiciousCount = events.filter((e) => e.is_suspicious).length;
 
   const navGroups = [
     {
       items: [
-        { id: 'overview',  title: 'Overview',     icon: LayoutDashboard, path: '/' },
-        { id: 'live',      title: 'Live View',    icon: Camera, badge: 'LIVE', path: '/live' },
-        { id: 'events',    title: 'Events',       icon: AlertTriangle, badge: suspiciousCount > 0 ? suspiciousCount : undefined, path: '/events' },
-      ]
+        { id: 'overview', title: 'Overview', icon: LayoutDashboard, path: '/' },
+        { id: 'live', title: 'Live View', icon: Camera, badge: 'LIVE', path: '/live' },
+        {
+          id: 'events',
+          title: 'Events',
+          icon: AlertTriangle,
+          badge: suspiciousCount > 0 ? suspiciousCount : undefined,
+          path: '/events',
+        },
+      ],
     },
     {
       heading: 'Intelligence',
       items: [
-        { id: 'faces',     title: 'Face Gallery', icon: Users, path: '/faces' },
-        { id: 'system',    title: 'System Health', icon: Activity, path: '/system' },
-      ]
+        { id: 'faces', title: 'Face Gallery', icon: Users, path: '/faces' },
+        { id: 'system', title: 'System Health', icon: Activity, path: '/system' },
+      ],
     },
     {
       heading: 'Configuration',
-      items: [
-        { id: 'settings',  title: 'Settings',     icon: Settings, path: '/settings' },
-      ]
-    }
+      items: [{ id: 'settings', title: 'Settings', icon: Settings, path: '/settings' }],
+    },
   ];
 
   const handleSelect = (item: any) => {
@@ -38,12 +43,8 @@ export function Sidebar({ activeId, onSelect }: { activeId: string, onSelect: (i
     navigate(item.path || '/');
   };
 
-  const handleLogout = () => {
-    apiFetch('/api/auth/logout', { method: 'POST' }).then(() => {
-      window.location.href = '/login';
-    }).catch(() => {
-      window.location.href = '/login';
-    });
+  const handleLogout = async () => {
+    await logout();
   };
 
   return (
@@ -72,20 +73,28 @@ export function Sidebar({ activeId, onSelect }: { activeId: string, onSelect: (i
                 {group.heading}
               </span>
             )}
-            {group.items.map(item => {
+            {group.items.map((item) => {
               const isActive = activeId === item.id;
               return (
                 <div
                   key={item.id}
                   onClick={() => handleSelect(item)}
-                  className={`group flex items-center justify-between px-2.5 py-[7.5px] rounded-lg cursor-pointer transition-all duration-150 ${isActive ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+                  className={`group flex items-center justify-between px-2.5 py-[7.5px] rounded-lg cursor-pointer transition-all duration-150 ${
+                    isActive
+                      ? 'bg-primary/10 text-primary font-semibold'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  }`}
                 >
                   <div className="flex items-center gap-2.5">
                     <item.icon className={`w-4 h-4 ${isActive ? 'text-primary' : 'group-hover:text-foreground'}`} />
                     <span className="text-[13px]">{item.title}</span>
                   </div>
                   {(item as any).badge !== undefined && (
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${(item as any).badge === 'LIVE' ? 'bg-success/20 text-success' : 'bg-primary/20 text-primary'}`}>
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                        (item as any).badge === 'LIVE' ? 'bg-success/20 text-success' : 'bg-primary/20 text-primary'
+                      }`}
+                    >
                       {(item as any).badge}
                     </span>
                   )}
@@ -99,7 +108,7 @@ export function Sidebar({ activeId, onSelect }: { activeId: string, onSelect: (i
       <div className="mt-auto pt-3 border-t border-border">
         <div
           onClick={handleLogout}
-          className="group flex items-center px-2.5 py-[7.5px] rounded-lg cursor-pointer text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="group flex items-center px-2.5 py-[7.5px] rounded-lg cursor-pointer text-muted-foreground hover:bg-muted hover:text-foreground transition"
         >
           <Lock className="w-4 h-4 mr-2.5" />
           <span className="text-[13px]">Lock Dashboard</span>

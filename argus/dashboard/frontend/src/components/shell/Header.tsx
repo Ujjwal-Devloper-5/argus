@@ -1,20 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { Bell, Sun, Moon, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { Sun, Moon, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { apiFetch } from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 
 export function Header({ activeId }: { activeId: string }) {
+  const { user } = useAuth();
+  const username = user?.username || 'Admin';
+
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
   });
-  const [username, setUsername] = useState('Admin');
   const [threatLevel, setThreatLevel] = useState<string>('LOW');
 
   useEffect(() => {
-    // Fetch authenticated user
-    apiFetch<{ username: string }>('/api/auth/me')
-      .then((res) => setUsername(res.username || 'Admin'))
-      .catch(() => {});
-
     // Fetch threat stats
     apiFetch<{ threat_level: string }>('/api/events/stats')
       .then((res) => setThreatLevel(res.threat_level || 'LOW'))

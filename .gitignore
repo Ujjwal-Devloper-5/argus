@@ -22,6 +22,8 @@ data/argus.log
 data/.jwt_secret
 data/.dashboard_users.json
 data/faces/*
+argus/data/
+*.mp4
 !data/.gitkeep
 !config/known_faces/.gitkeep
 

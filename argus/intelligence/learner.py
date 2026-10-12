@@ -65,7 +65,43 @@ class AutoLearner:
         self._embedding_db = embedding_db
         # In-memory cache: face_hash -> (best_quality_score, best_face_img)
         self._quality_cache: dict[str, tuple[float, np.ndarray]] = {}
+        # Online vector centroid clusters: face_hash -> 512-dim normalized centroid
+        self._cluster_centroids: dict[str, np.ndarray] = {}
         self._lock = asyncio.Lock()
+
+    def resolve_cluster_hash(self, embedding: np.ndarray, similarity_threshold: float = 0.62) -> tuple[str, float]:
+        """
+        Match incoming embedding against active unknown face clusters using cosine similarity.
+        Returns (canonical_face_hash, similarity_score).
+        Updates cluster centroid using online exponential moving average if matched.
+        """
+        arr = np.asarray(embedding, dtype=np.float32).flatten()
+        norm = float(np.linalg.norm(arr))
+        if norm < 1e-6:
+            return compute_face_hash(arr), 0.0
+        v = (arr / norm).astype(np.float32)
+
+        best_hash = None
+        best_sim = -1.0
+
+        for f_hash, centroid in self._cluster_centroids.items():
+            sim = float(np.dot(v, centroid))
+            if sim > best_sim:
+                best_sim = sim
+                best_hash = f_hash
+
+        if best_sim >= similarity_threshold and best_hash is not None:
+            # Update running centroid with alpha=0.85 momentum
+            updated = 0.85 * self._cluster_centroids[best_hash] + 0.15 * v
+            up_norm = float(np.linalg.norm(updated))
+            if up_norm > 1e-6:
+                self._cluster_centroids[best_hash] = (updated / up_norm).astype(np.float32)
+            return best_hash, best_sim
+
+        # New identity cluster
+        new_hash = compute_face_hash(arr)
+        self._cluster_centroids[new_hash] = v
+        return new_hash, best_sim
 
     async def track_unknown(
         self,
@@ -80,11 +116,23 @@ class AutoLearner:
         if face_match.is_known:
             return
 
+        if getattr(face_match, "embedding", None) is None:
+            return
+
         embedding = np.asarray(face_match.embedding, dtype=np.float32)
-        face_hash = compute_face_hash(embedding)
+        async with self._lock:
+            face_hash, _ = self.resolve_cluster_hash(embedding, similarity_threshold=0.62)
 
         # Decode face crop and score its quality
-        face_img = self._decode_face_crop(face_match.face_crop, frame)
+        crop_bytes = getattr(face_match, "face_crop", None)
+        face_img = self._decode_face_crop(crop_bytes, frame)
+        if face_img is None and frame is not None and hasattr(face_match, "detection"):
+            det = face_match.detection
+            h, w = frame.shape[:2]
+            x1, y1 = max(0, min(det.x1, w)), max(0, min(det.y1, h))
+            x2, y2 = max(0, min(det.x2, w)), max(0, min(det.y2, h))
+            if x2 > x1 and y2 > y1:
+                face_img = frame[y1:y2, x1:x2]
         quality = score_face_quality(face_img) if face_img is not None else 0.0
 
         # Update best quality cache

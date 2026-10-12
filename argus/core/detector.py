@@ -233,6 +233,16 @@ class DetectorWorker:
             device: Target execution device ('cuda:0', 'cpu', 'mps', 'auto', or None).
             executor: Optional Executor instance for running inference off-thread.
         """
+        if isinstance(model, DetectionConfig):
+            cfg = model
+            model = cfg.model
+            if confidence == 0.60:
+                confidence = cfg.confidence
+            if classes is None:
+                classes = cfg.classes
+            if device is None:
+                device = cfg.device
+
         if not model or not str(model).strip():
             raise ValueError("model must be a valid non-empty model path or name")
 
@@ -282,6 +292,14 @@ class DetectorWorker:
                 "ultralytics is required for DetectorWorker. "
                 "Please install ultralytics with `pip install ultralytics`."
             )
+
+        # Ensure PyTorch thread bounds are applied to prevent CPU saturation
+        try:
+            import torch
+            torch.set_num_threads(2)
+            torch.set_num_interop_threads(1)
+        except Exception:
+            pass
 
         # The model must be loaded exactly ONCE in __init__, never reloaded per-frame.
         self.model = YOLO(self.model_name)

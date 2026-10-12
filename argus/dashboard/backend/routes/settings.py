@@ -1,10 +1,14 @@
 """
 Settings API — read and update Argus configuration.
 """
+import asyncio
 import os
+import shutil
+from pathlib import Path
 
 import yaml
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 
 from argus.config import get_settings
 from argus.dashboard.backend.auth import get_auth_dependency
@@ -93,7 +97,7 @@ async def get_current_settings():
 @router.put("")
 async def update_settings(updates: dict):
     # Only allow safe fields (implementation is basic for this example)
-    allowed_keys = {'cameras', 'detection', 'llm', 'alerts', 'storage'}
+    allowed_keys = {'cameras', 'detection', 'llm', 'alerts', 'storage', 'recordings_path'}
 
     config_path = "config/config.yaml"
     if os.path.exists(config_path):
@@ -126,3 +130,102 @@ async def update_settings(updates: dict):
     get_settings.cache_clear()
 
     return {"success": True, "message": "Settings updated"}
+
+
+class TestStorageRequest(BaseModel):
+    backend: str = "local"
+    local_path: str = "./data/clips"
+    recordings_path: str | None = None
+    rclone_remote: str | None = None
+    rclone_path: str | None = None
+
+
+@router.post("/test-storage")
+async def test_storage(req: TestStorageRequest):
+    """Verify local storage write permissions or rclone remote connectivity."""
+    results = {}
+
+    # 1. Test local clips directory
+    try:
+        p = Path(req.local_path)
+        p.mkdir(parents=True, exist_ok=True)
+        test_file = p / ".argus_write_probe"
+        test_file.write_text("ok")
+        test_file.unlink(missing_ok=True)
+
+        stat = shutil.disk_usage(p)
+        free_gb = round(stat.free / (1024 ** 3), 2)
+        total_gb = round(stat.total / (1024 ** 3), 2)
+        results["local"] = {
+            "success": True,
+            "path": str(p.resolve()),
+            "free_gb": free_gb,
+            "total_gb": total_gb,
+            "message": f"Local storage writable ({free_gb} GB free of {total_gb} GB)",
+        }
+    except Exception as exc:
+        results["local"] = {
+            "success": False,
+            "path": req.local_path,
+            "message": f"Local path error: {exc}",
+        }
+
+    # 2. Test recordings path if specified
+    if req.recordings_path:
+        try:
+            rp = Path(req.recordings_path)
+            rp.mkdir(parents=True, exist_ok=True)
+            probe = rp / ".probe"
+            probe.write_text("ok")
+            probe.unlink(missing_ok=True)
+            results["recordings"] = {"success": True, "path": str(rp.resolve())}
+        except Exception as exc:
+            results["recordings"] = {"success": False, "message": str(exc)}
+
+    # 3. Test rclone if backend is rclone
+    if req.backend == "rclone":
+        if not req.rclone_remote:
+            results["rclone"] = {
+                "success": False,
+                "message": "No rclone remote specified (e.g. gdrive:Security/Argus)",
+            }
+        else:
+            rclone_bin = shutil.which("rclone")
+            if not rclone_bin:
+                results["rclone"] = {
+                    "success": False,
+                    "message": "rclone binary not found in system PATH. Install rclone: https://rclone.org",
+                }
+            else:
+                try:
+                    proc = await asyncio.create_subprocess_exec(
+                        rclone_bin, "lsd", req.rclone_remote, "--max-depth", "1",
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    _, stderr = await asyncio.wait_for(proc.communicate(), timeout=10.0)
+                    if proc.returncode == 0:
+                        results["rclone"] = {
+                            "success": True,
+                            "remote": req.rclone_remote,
+                            "message": f"Successfully connected to {req.rclone_remote}",
+                        }
+                    else:
+                        results["rclone"] = {
+                            "success": False,
+                            "remote": req.rclone_remote,
+                            "message": stderr.decode().strip() or f"rclone exited with code {proc.returncode}",
+                        }
+                except Exception as exc:
+                    results["rclone"] = {
+                        "success": False,
+                        "remote": req.rclone_remote,
+                        "message": str(exc),
+                    }
+
+    target_success = results.get(req.backend, {}).get("success", False)
+    return {
+        "success": target_success,
+        "backend": req.backend,
+        "details": results,
+    }

@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from argus.config import get_settings
+from argus.core.frame_hub import frame_hub
 from argus.dashboard.backend.auth import get_auth_dependency
 from argus.dashboard.backend.models import CameraStatus
 from argus.dashboard.backend.schemas.settings import CameraUpdateRequest
@@ -47,12 +48,16 @@ def _save_yaml(data: dict[str, Any]) -> None:
 
 class StreamTestRequest(BaseModel):
     rtsp_url: str
-    timeout_seconds: int = 5
+    timeout_seconds: int = 6
 
 
 class StreamTestResponse(BaseModel):
     success: bool
     message: str
+    codec: str | None = None
+    resolution: str | None = None
+    fps: float | None = None
+    preview_base64: str | None = None
     host: str | None = None
     port: int | None = None
 
@@ -110,6 +115,9 @@ async def add_camera(payload: CameraUpdateRequest):
     config_data["cameras"] = cams
     _save_yaml(config_data)
 
+    if not payload.disabled:
+        asyncio.create_task(frame_hub.ensure_camera_streaming(name_clean))
+
     return CameraStatus(
         name=name_clean,
         rtsp_url=_redact_rtsp(payload.rtsp_url),
@@ -145,6 +153,9 @@ async def update_camera(name: str, payload: CameraUpdateRequest):
     config_data["cameras"] = cams
     _save_yaml(config_data)
 
+    if not payload.disabled:
+        asyncio.create_task(frame_hub.ensure_camera_streaming(updated_dict["name"]))
+
     return CameraStatus(
         name=updated_dict["name"],
         rtsp_url=_redact_rtsp(new_rtsp),
@@ -174,78 +185,43 @@ async def delete_camera(name: str):
 
 @router.post("/test-stream", response_model=StreamTestResponse)
 async def test_stream(req: StreamTestRequest):
-    """Test TCP socket connectivity to the RTSP host and port."""
-    parsed = urlparse(req.rtsp_url)
-    host = parsed.hostname
-    port = parsed.port or 554
-
-    if not host:
-        return StreamTestResponse(success=False, message="Invalid RTSP URL: hostname missing")
-
-    loop = asyncio.get_running_loop()
-
-    def _probe_tcp():
-        try:
-            with socket.create_connection((host, port), timeout=req.timeout_seconds):
-                return True, "Connection established successfully"
-        except socket.timeout:
-            return False, f"Connection timed out after {req.timeout_seconds}s"
-        except ConnectionRefusedError:
-            return False, f"Port {port} connection refused on host {host}"
-        except Exception as e:
-            return False, f"Connection error: {str(e)}"
-
-    success, message = await loop.run_in_executor(None, _probe_tcp)
-    return StreamTestResponse(success=success, message=message, host=host, port=port)
+    """Test RTSP stream connectivity, decode a real frame, and return metadata with live preview."""
+    result = await frame_hub.probe_rtsp(req.rtsp_url, timeout_seconds=req.timeout_seconds)
+    return StreamTestResponse(**result)
 
 
 @router.get("/{name}/snapshot")
 async def get_camera_snapshot(name: str):
+    """Return the latest live snapshot for a camera."""
+    frame = frame_hub.get_latest_jpeg(name)
+    if frame:
+        return Response(content=frame, media_type="image/jpeg")
+
+    # Fallback to saved disk thumbnail if available
     settings = get_settings()
     search_pattern = os.path.join(settings.thumbnails_path, f"{name}_*.jpg")
     loop = asyncio.get_running_loop()
     files = await loop.run_in_executor(None, glob.glob, search_pattern)
-    if not files:
-        raise HTTPException(status_code=404, detail="Thumbnail not found")
-    latest_file = max(files, key=os.path.getctime)
-    with open(latest_file, "rb") as f:
-        content = f.read()
-    return Response(content=content, media_type="image/jpeg")
-
-
-async def mjpeg_generator(name: str):
-    settings = get_settings()
-    search_pattern = os.path.join(settings.thumbnails_path, f"{name}_*.jpg")
-    last_mtime = 0
-    last_file = None
-    loop = asyncio.get_running_loop()
-
-    while True:
-        files = await loop.run_in_executor(None, glob.glob, search_pattern)
-        if not files:
-            await asyncio.sleep(0.5)
-            continue
-
+    if files:
         latest_file = max(files, key=os.path.getctime)
-        mtime = os.path.getmtime(latest_file)
+        with open(latest_file, "rb") as f:
+            return Response(content=f.read(), media_type="image/jpeg")
 
-        if mtime > last_mtime or latest_file != last_file:
-            last_mtime = mtime
-            last_file = latest_file
-            try:
-                with open(latest_file, "rb") as f:
-                    frame = f.read()
-                yield (
-                    b"--frame\r\n"
-                    b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
-                )
-            except Exception:
-                pass
-        await asyncio.sleep(0.1)  # Max 10fps
+    # Generate placeholder
+    placeholder = frame_hub.generate_placeholder_frame(f"{name}: Connecting...")
+    return Response(content=placeholder, media_type="image/jpeg")
 
 
 @router.get("/{name}/stream")
 async def get_camera_stream(name: str):
+    """Low-latency multipart MJPEG live video stream."""
     return StreamingResponse(
-        mjpeg_generator(name), media_type="multipart/x-mixed-replace; boundary=frame"
+        frame_hub.subscribe(name),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "Connection": "keep-alive",
+        },
     )
