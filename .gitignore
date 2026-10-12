@@ -19,6 +19,9 @@ data/events/*
 data/embeddings/*
 data/argus.db
 data/argus.log
+data/.jwt_secret
+data/.dashboard_users.json
+data/faces/*
 !data/.gitkeep
 !config/known_faces/.gitkeep
 

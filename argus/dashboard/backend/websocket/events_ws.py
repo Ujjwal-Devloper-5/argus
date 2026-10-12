@@ -83,11 +83,10 @@ async def ws_kafka_bridge():
         await consumer.stop()
 
 @router.websocket("")
-async def websocket_endpoint(websocket: WebSocket, ticket: str = Query(...)):
+async def websocket_endpoint(websocket: WebSocket, ticket: str = Query(default="")):
     if not verify_ws_ticket(ticket):
-        await websocket.close(code=1008)
+        await websocket.close(code=1008)  # WS_1008_POLICY_VIOLATION
         return
-    # Basic token check could be implemented here
     await events_manager.connect(websocket)
     try:
         while True:

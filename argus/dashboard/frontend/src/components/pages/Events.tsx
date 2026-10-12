@@ -10,9 +10,12 @@ export default function Events() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    apiFetch<{items: EventSummary[]}>('/api/events')
-      .then(res => setEvents(res.items))
-      .catch(console.error)
+    apiFetch<EventSummary[] | {items: EventSummary[]}>('/api/events')
+      .then(res => {
+        const list = Array.isArray(res) ? res : ((res as any)?.items || []);
+        setEvents(list);
+      })
+      .catch(() => setEvents([]))
       .finally(() => setLoading(false));
   }, []);
 

@@ -70,7 +70,10 @@ async def stats_broadcaster():
             logger.error("Error in stats broadcaster", error=str(e))
 
 @router.websocket("")
-async def websocket_endpoint(websocket: WebSocket, token: str | None = None):
+async def websocket_endpoint(websocket: WebSocket, ticket: str = Query(default="")):
+    if not verify_ws_ticket(ticket):
+        await websocket.close(code=1008)  # WS_1008_POLICY_VIOLATION
+        return
     await stats_manager.connect(websocket)
     try:
         while True:

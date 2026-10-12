@@ -12,6 +12,7 @@ import Faces from './components/pages/Faces';
 import SystemHealth from './components/pages/SystemHealth';
 import SettingsPage from './components/pages/SettingsPage';
 import SetupWizard, { CreateUserWall } from './components/pages/SetupWizard';
+import Login from './components/pages/Login';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Bootstrap: check setup status before rendering anything
@@ -54,6 +55,7 @@ function Dashboard() {
           <Header activeId={activeId} />
           <main className="flex-1 overflow-y-auto">
             <Routes>
+              <Route path="/login" element={<Login />} />
               <Route path="/" element={<ErrorBoundary><Overview /></ErrorBoundary>} />
               <Route path="/live" element={<ErrorBoundary><LiveView /></ErrorBoundary>} />
               <Route path="/events" element={<ErrorBoundary><Events /></ErrorBoundary>} />

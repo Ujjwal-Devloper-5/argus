@@ -51,7 +51,7 @@ class ArgusProducer:
                 key_serializer=lambda k: k.encode("utf-8") if k else None,
                 enable_idempotence=cfg.producer.enable_idempotence,
                 acks=cfg.producer.acks,
-                compression_type="lz4",
+                compression_type="gzip",
                 max_batch_size=65536,
                 linger_ms=5,
             )
