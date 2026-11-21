@@ -32,7 +32,7 @@ dependencies = [
   "onnxruntime>=1.18.0",               # InsightFace ONNX backend
   # --- Data & Math ---
   "numpy>=1.26.0",
-  "pillow>=10.3.0",
+  "pillow>=13.0.0",
   "scipy>=1.13.0",
   # --- Database ---
   "sqlalchemy[asyncio]>=2.0.30",
